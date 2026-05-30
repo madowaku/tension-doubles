@@ -719,11 +719,21 @@ local function updateTeamBeam(teamName)
 	local color = BEAM_COLORS[tensionState] or BEAM_COLORS.Normal
 	local width = Config.BeamWidth
 	local transparency = 0.12
+	local curve = Config.BeamCurveNormal or 0
 
-	if realPinCount >= 2 and tensionState ~= "Broken" then
+	if tensionState == "Slack" then
+		width = Config.BeamWidthSlack or (Config.BeamWidth - 0.55)
+		transparency = 0.22
+		curve = Config.BeamCurveSlack or 2.8
+	elseif tensionState == "OverTension" then
+		width = Config.BeamWidthOverTension or (Config.BeamWidth - 0.25)
+		transparency = 0.08
+		curve = Config.BeamCurveOverTension or -1.1
+	elseif realPinCount >= 2 and tensionState ~= "Broken" then
 		color = BEAM_COLORS.Hare
-		width = Config.BeamWidth + 0.65
+		width = Config.BeamWidth + (Config.BeamWidthHareBonus or 0.82)
 		transparency = 0.02
+		curve = Config.BeamCurveHare or 0
 	elseif realPinCount == 1 and tensionState ~= "Broken" then
 		color = Color3.fromRGB(255, 170, 90)
 		width = Config.BeamWidth + 0.25
@@ -731,8 +741,11 @@ local function updateTeamBeam(teamName)
 	elseif tensionState == "Broken" then
 		width = 0.25
 		transparency = 0.65
+		curve = Config.BeamCurveSlack or 2.8
 	end
 
+	beam.CurveSize0 = curve
+	beam.CurveSize1 = -curve
 	beam.Color = ColorSequence.new(color)
 	beam.Width0 = width
 	beam.Width1 = width
@@ -1162,7 +1175,7 @@ local function processNetHit(teamName)
 		fxType = "OverTension"
 		lift = Config.ReturnLiftOverTension or 0.20
 		local wobbleSign = (math.random() < 0.5) and -1 or 1
-		horizontal = MathUtil.safeUnit(horizontal + netDir * wobbleSign * 0.22, returnDir)
+		horizontal = MathUtil.safeUnit(horizontal + netDir * wobbleSign * (Config.OverTensionWobbleScale or 0.42), returnDir)
 	elseif pinCount == 1 then
 		fxType = "OnePin"
 		lift = Config.ReturnLiftOnePin or 0.30

@@ -35,6 +35,30 @@ assertIncludes(
 
 assertIncludes(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  'MaterialName = "Tension Fiber"',
+  "the partner net should have a clear original material name"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  'NormalHitText = "FIBER HIT!"',
+  "normal good-tension returns should read as Tension Fiber, not generic hits"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "BeamCurveSlack",
+  "Slack should have a sagging fiber beam"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "OverTensionWobbleScale",
+  "Over Tension should be risky and unstable, not strictly better"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
   "NetGuidanceBroadcastInterval",
   "live net guidance should have a throttled broadcast interval"
 );
@@ -101,6 +125,18 @@ assertIncludes(
 
 assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
+  "BeamCurveSlack",
+  "server beam visuals should show Slack fiber sag"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "Config.OverTensionWobbleScale",
+  "server should tune Over Tension instability from config"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
   "SoloGhostsMirrorPinning",
   "server should mirror PIN to empty ghost teams only during solo testing"
 );
@@ -125,8 +161,14 @@ assertIncludes(
 
 assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
-  'return "HIT!"',
-  "normal returns should read as a plain hit, not a PIN"
+  'return Config.NormalHitText or "FIBER HIT!"',
+  "normal returns should read as a Tension Fiber hit, not a PIN"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.NormalHitText",
+  "normal return callout should use Tension Fiber copy from config"
 );
 
 assertIncludes(

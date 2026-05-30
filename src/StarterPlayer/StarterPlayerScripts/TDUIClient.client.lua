@@ -303,7 +303,7 @@ local function fxTextForType(fxType, comboCount)
 	elseif fxType == "Broken" then
 		return "FRIENDSHIP BREAK!", Color3.fromRGB(210, 210, 210)
 	end
-	return "HIT!", Color3.fromRGB(245, 245, 255)
+	return Config.NormalHitText or "FIBER HIT!", Color3.fromRGB(245, 245, 255)
 end
 
 local function playHareFlash(comboCount)

@@ -6,6 +6,7 @@ local Config = {
 	Version = "0.6.0",
 	Title = "Tension Doubles: PINTO HARE!",
 	Subtitle = "Hold PIN. Sync for HARE.",
+	MaterialName = "Tension Fiber",
 	ScoreToWin = 7,
 
 	-- Court dimensions in studs.
@@ -86,6 +87,14 @@ local Config = {
 	-- Visuals. Thicker Beam and clearer ball for phone screens.
 	BeamWidth = 2.2,
 	BeamTextureSpeed = 1.8,
+	BeamCurveSlack = 2.8,
+	BeamCurveNormal = 0,
+	BeamCurveOverTension = -1.1,
+	BeamCurveHare = 0,
+	BeamWidthSlack = 1.55,
+	BeamWidthOverTension = 1.85,
+	BeamWidthHareBonus = 0.82,
+	OverTensionWobbleScale = 0.42,
 	HudMessageDuration = 1.25,
 	MobilePinButtonScale = 0.20,
 
@@ -123,9 +132,10 @@ local Config = {
 	DesktopHint = "Hold E / Space / Shift: PIN",
 	GamepadHint = "Hold R2 / X: PIN",
 	NetGuideMakeText = "MAKE A NET",
-	NetGuideGoodText = "GOOD NET",
-	NetGuideTooCloseText = "MOVE APART",
-	NetGuideTooFarText = "TOO FAR",
+	NormalHitText = "FIBER HIT!",
+	NetGuideGoodText = "TENSION OK",
+	NetGuideTooCloseText = "FIBER SAG",
+	NetGuideTooFarText = "TOO TIGHT",
 	NetGuidePinText = "HOLD PIN",
 	NetGuideHareText = "HARE READY!",
 	NetGuidanceBroadcastInterval = 0.18,
