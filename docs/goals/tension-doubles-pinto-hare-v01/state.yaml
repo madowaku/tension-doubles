@@ -1,0 +1,205 @@
+# Goal Maker v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Tension Doubles: Pinto Hare Roblox ver0.1"
+  slug: "tension-doubles-pinto-hare-v01"
+  kind: specific
+  tranche: "Discover the current Rojo project state, implement the first safe verified MVP improvement slice, and audit it against the Roblox ver0.1 goal."
+  status: done
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    reasoning_hint: medium
+    objective: "Map the existing Roblox/Rojo project against the ver0.1 spec and identify runtime-risk, missing-core, and high-feedback improvement candidates."
+    inputs:
+      - "README.md"
+      - "CODEX_NEXT_PROMPT.md"
+      - "MANUAL_IMPORT.md"
+      - "default.project.json"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ReplicatedStorage/TDShared/MathUtil.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDCameraClient.client.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+    constraints:
+      - "Read-only."
+      - "Do not edit implementation files."
+      - "Prefer concrete file-path evidence over generic advice."
+      - "Check for Roblox API misuse, startup errors, unstable ball/net logic, missing feedback, and Rojo import issues."
+    expected_output:
+      - "Repo and architecture map"
+      - "Likely Roblox Studio runtime risks"
+      - "Local verification commands available or unavailable"
+      - "Ranked safe implementation candidates"
+      - "Candidate Worker task with exact allowed_files, verify, and stop_if"
+    receipt:
+      result: done
+      summary: "Existing Rojo project already contains the core MVP in six source files: config/math shared modules, one server authority script, and input/camera/UI clients. Rojo build succeeded when outputting inside the workspace. Highest safe next step is a small feedback/compliance slice: add visible ball trail feedback, Broken friendship notifications, complete ghost hiding when real pairs exist, and Space key pin input."
+      evidence:
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "CODEX_NEXT_PROMPT.md"
+        - "README.md"
+      verification:
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+        - cmd: "rojo build default.project.json --output C:\\tmp\\tension-doubles-pinto-hare.rbxlx"
+          status: blocked
+          note: "Environment denied writing to C:\\tmp; workspace output passed."
+      candidates:
+        - "Add Trail-based ball/hit feedback and color it for Hare/OnePin/Slack/OverTension."
+        - "Emit throttled Broken friendship UI when a team is too far apart."
+        - "Set ghosts fully transparent when a real pair exists."
+        - "Bind Space for pin input to match the spec."
+        - "Later: refine out-of-bounds to distinguish valid court from out zone."
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Choose the first safe implementation slice by impact on playable ver0.1, confidence, reversibility, and verification strength."
+    inputs:
+      - "T001 receipt"
+      - "Original user specification in the thread"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Prefer a small slice that improves runtime safety or immediately visible play feedback."
+      - "Reject large rewrites and features outside ver0.1."
+    expected_output:
+      - "Decision"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred tasks"
+    receipt:
+      result: done
+      decision: "Do the first feedback/compliance slice. It is high-impact for ver0.1 feel, small, reversible, and locally verifiable with Rojo build."
+      exact_worker_objective: "Add ball Trail feedback that changes for hit types, emit throttled Broken friendship UI when a team is too far apart, fully hide ghost partners when a real pair exists, and bind Space as an additional pin input."
+      allowed_files:
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+        - "docs/goals/tension-doubles-pinto-hare-v01/state.yaml"
+      verify:
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+        - "node C:\\Users\\hiro\\.codex\\skills\\goal-maker\\scripts\\check-goal-state.mjs docs\\goals\\tension-doubles-pinto-hare-v01\\state.yaml"
+      stop_if:
+        - "Need Roblox Studio runtime-only evidence to choose implementation details."
+        - "Need to alter core scoring, team assignment, or ball physics rules."
+        - "Rojo build fails twice after the patch."
+      deferred_tasks:
+        - "Out-of-bounds tuning against effective court vs out zones."
+        - "Serve preview marker."
+        - "ParticleEmitter/audio polish."
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Add ball Trail feedback that changes for hit types, emit throttled Broken friendship UI when a team is too far apart, fully hide ghost partners when a real pair exists, and bind Space as an additional pin input."
+    allowed_files:
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+      - "docs/goals/tension-doubles-pinto-hare-v01/state.yaml"
+    verify:
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+      - "node C:\\Users\\hiro\\.codex\\skills\\goal-maker\\scripts\\check-goal-state.mjs docs\\goals\\tension-doubles-pinto-hare-v01\\state.yaml"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Behavior is ambiguous under the ver0.1 spec."
+      - "Local verification fails twice for the same reason."
+      - "Roblox Studio-only evidence is required to proceed safely."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+      commands:
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+      summary: "Added server-created ball Trail attachments with hit-type colors/lifetime, throttled Broken friendship HUD events during rallies, full ghost transparency when real pairs exist, and Space pin input that passes through default jump."
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: blocked
+    reasoning_hint: default
+    objective: "If the first slice succeeds, improve moment-to-moment feedback for hits, Hare, one-pin, over-tension, broken friendship, or serve preview without changing core rules."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "T003 is not done."
+      - "Judge has not bounded this task."
+      - "Need assets, Studio-only editing, or behavior beyond ver0.1."
+    receipt:
+      result: blocked
+      summary: "Deferred optional polish. The first safe implementation slice is complete; further serve marker, particles, or audio should be selected by a new Judge/Worker task after this tranche audit."
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the implemented slice satisfies the current tranche and advances the original Roblox ver0.1 outcome."
+    inputs:
+      - "All done task receipts"
+      - "Last verification"
+      - "Current dirty diff"
+      - "Original user specification in the thread"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Reject completion if required Worker work is still queued or active."
+      - "Name the next task if the slice is not enough."
+    expected_output:
+      - "complete | not_complete"
+      - "missing evidence"
+      - "mapping to ver0.1 requirements"
+      - "next task if not complete"
+    receipt:
+      result: done
+      decision: complete
+      summary: "The current tranche is complete: discovery found an already playable Rojo MVP, Judge selected a bounded feedback/compliance slice, Worker implemented it, and Rojo build passed after the changes."
+      mapping_to_ver0_1:
+        - "Ball returns now have visible Trail feedback with distinct colors for Pin, Hare, OnePin, Slack, and OverTension."
+        - "Broken friendship now emits throttled HUD feedback during rallies instead of only changing the Beam."
+        - "Ghost partners are fully transparent and moved away when real pairs exist."
+        - "PC pin input now includes Space while preserving default jump pass-through."
+      verification:
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+      residual_risk:
+        - "Roblox Studio runtime/playfeel still needs manual or in-Studio multiplayer testing."
+        - "No local Luau type checker was available; Rojo build validates project assembly and syntax enough for this tranche."
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: pass
+    task: T003
+    commands:
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"

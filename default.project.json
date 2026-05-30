@@ -1,0 +1,29 @@
+{
+  "name": "TensionDoubles_PintoHare",
+  "tree": {
+    "$className": "DataModel",
+    "ReplicatedStorage": {
+      "TDShared": {
+        "$path": "src/ReplicatedStorage/TDShared"
+      }
+    },
+    "ServerScriptService": {
+      "TDServer": {
+        "$path": "src/ServerScriptService/TDServer.server.lua"
+      }
+    },
+    "StarterPlayer": {
+      "StarterPlayerScripts": {
+        "TDInputClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+        },
+        "TDCameraClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/TDCameraClient.client.lua"
+        },
+        "TDUIClient": {
+          "$path": "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        }
+      }
+    }
+  }
+}
