@@ -61,6 +61,12 @@ local scoreLabel = makeLabel("ScoreLabel", UDim2.fromScale(0.74, 0.08), UDim2.fr
 local messageLabel = makeLabel("MessageLabel", UDim2.fromScale(0.90, 0.18), UDim2.fromScale(0.5, 0.21), isTouch and 42 or 48, true)
 local subMessageLabel = makeLabel("SubMessageLabel", UDim2.fromScale(0.86, 0.07), UDim2.fromScale(0.5, 0.305), isTouch and 20 or 22, false)
 local hintLabel = makeLabel("HintLabel", UDim2.fromScale(0.88, 0.08), UDim2.fromScale(0.5, 0.90), isTouch and 18 or 22, false)
+local netGuideLabel = makeLabel("NetGuideLabel", UDim2.fromScale(0.62, 0.07), UDim2.fromScale(0.5, 0.80), isTouch and 19 or 22, true)
+netGuideLabel.TextColor3 = Color3.fromRGB(255, 235, 145)
+netGuideLabel.BackgroundColor3 = Color3.fromRGB(8, 12, 22)
+netGuideLabel.BackgroundTransparency = 0.38
+netGuideLabel.ZIndex = 12
+netGuideLabel.Text = ""
 
 local rotateHint = Instance.new("Frame")
 rotateHint.Name = "RotateHint"
@@ -131,6 +137,9 @@ local function applyResponsiveLayout()
 		hintLabel.Size = UDim2.fromScale(portrait and 0.82 or 0.66, portrait and 0.07 or 0.06)
 		hintLabel.TextSize = portrait and 16 or 18
 		hintLabel.Text = deviceHintText(portrait)
+		netGuideLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileNetGuideYPortrait or 0.815) or (Config.MobileNetGuideYLandscape or 0.805))
+		netGuideLabel.Size = UDim2.fromScale(portrait and 0.68 or 0.56, portrait and 0.060 or 0.064)
+		netGuideLabel.TextSize = portrait and 18 or 20
 		rotateHint.Visible = Config.ShowRotateHint ~= false and portrait
 	else
 		scoreLabel.Position = UDim2.fromScale(0.5, 0.065)
@@ -142,6 +151,9 @@ local function applyResponsiveLayout()
 		hintLabel.Position = UDim2.fromScale(0.5, 0.93)
 		hintLabel.TextSize = 22
 		hintLabel.Text = deviceHintText(false)
+		netGuideLabel.Position = UDim2.fromScale(0.5, 0.82)
+		netGuideLabel.Size = UDim2.fromScale(0.46, 0.062)
+		netGuideLabel.TextSize = 22
 		rotateHint.Visible = false
 	end
 end
@@ -279,11 +291,11 @@ end
 local function fxTextForType(fxType, comboCount)
 	if fxType == "Hare" then
 		if comboCount and comboCount >= 2 then
-			return "HARE COMBO x" .. tostring(comboCount) .. "!!", Color3.fromRGB(255, 232, 96)
+			return "HARE!! x" .. tostring(comboCount), Color3.fromRGB(255, 230, 90)
 		end
-		return "HARE!!", Color3.fromRGB(255, 220, 80)
+		return "HARE!!", Color3.fromRGB(255, 230, 90)
 	elseif fxType == "OnePin" then
-		return "ONE PIN!", Color3.fromRGB(255, 160, 95)
+		return "ONE PIN!", Color3.fromRGB(255, 170, 95)
 	elseif fxType == "Slack" then
 		return "SLACK!", Color3.fromRGB(95, 190, 255)
 	elseif fxType == "OverTension" then
@@ -368,11 +380,32 @@ local function setMessage(text, sizeBoost)
 	messageLabel.TextSize = ((isTouch and (portrait and 37 or 44)) or 48) + (sizeBoost or 0)
 end
 
+local function updateNetGuidance(data)
+	local localTeam = localPlayer.Team and localPlayer.Team.Name
+	local guidance = localTeam and data.netGuidance and data.netGuidance[localTeam]
+	if guidance and guidance.text then
+		netGuideLabel.Text = guidance.text
+		if guidance.state == "Normal" then
+			netGuideLabel.TextColor3 = Color3.fromRGB(150, 255, 205)
+		elseif guidance.state == "Slack" then
+			netGuideLabel.TextColor3 = Color3.fromRGB(120, 205, 255)
+		elseif guidance.state == "OverTension" or guidance.state == "Broken" then
+			netGuideLabel.TextColor3 = Color3.fromRGB(255, 135, 125)
+		else
+			netGuideLabel.TextColor3 = Color3.fromRGB(255, 235, 145)
+		end
+	else
+		netGuideLabel.Text = Config.NetGuideMakeText or "MAKE A NET"
+		netGuideLabel.TextColor3 = Color3.fromRGB(255, 235, 145)
+	end
+end
+
 MatchStateEvent.OnClientEvent:Connect(function(data)
 	applyResponsiveLayout()
 	local redScore = data.redScore or 0
 	local blueScore = data.blueScore or 0
 	scoreLabel.Text = string.format("RED  %d  -  %d  BLUE", redScore, blueScore)
+	updateNetGuidance(data)
 
 	local state = data.state or ""
 	local message = normalizeMessage(data.message)
@@ -396,8 +429,8 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 		messageLabel.Text = ""
 		subMessageLabel.Text = ""
 	elseif state == "PointScored" then
-		setMessage(message, 0)
-		subMessageLabel.Text = ""
+		setMessage(message, 4)
+		subMessageLabel.Text = "NEXT SERVE!"
 	elseif state == "GameOver" then
 		setMessage(message ~= "" and message or "GAME SET!", 4)
 		subMessageLabel.Text = "PLAY AGAIN!"

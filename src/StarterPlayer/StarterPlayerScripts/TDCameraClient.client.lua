@@ -47,11 +47,14 @@ local function bindHitFx()
 	end
 	hitFx.OnClientEvent:Connect(function(fxType, _position, _teamName, _rallyCount, comboCount)
 		if fxType == "Hare" then
-			shakePower = comboCount and comboCount >= 2 and 1.55 or 0.95
-			shakeUntil = os.clock() + 0.25
+			shakePower = comboCount and comboCount >= 2 and (Config.HareComboCameraKick or 1.75) or (Config.HareCameraKick or 1.25)
+			shakeUntil = os.clock() + 0.28
 		elseif fxType == "OverTension" then
 			shakePower = 0.50
 			shakeUntil = os.clock() + 0.13
+		else
+			shakePower = Config.NormalHitCameraKick or 0.34
+			shakeUntil = os.clock() + 0.11
 		end
 	end)
 

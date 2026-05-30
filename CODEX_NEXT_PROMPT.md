@@ -1,10 +1,11 @@
 # Next Codex Prompt
 
-We have Roblox project `Tension Doubles: PINTO HARE!` v0.5.3.
+We have Roblox project `Tension Doubles: PINTO HARE!` v0.6.
 
-Please playtest/tune the serve and first rally:
+Continue polishing the first 30 seconds:
 
-1. Confirm opening serves land around the opponent mid-court, not the front edge and not OUT.
-2. Keep PIN/HARE return balance from v0.5.2: PIN should usually land in court, HARE should feel stronger but not become an automatic OUT.
-3. If needed, tune only serve-specific values first: `BallServeSpeed`, `ServeVerticalVelocity`, `ServeHeight`, `ServeStartZ`, and `ServeLateralMax`.
-4. Do not increase `BallBaseSpeed` or return bonuses unless return play feels too weak after serve tuning.
+1. Confirm players can infer they are making a net with their partner.
+2. Confirm PIN and HARE feedback are readable and exciting.
+3. Confirm score reasons are short and readable on mobile.
+4. Do not start UGC, cosmetics, unlocks, themed arenas, ranking, monetization, or matchmaking yet.
+5. Keep ball, hit, and score authority on the server.

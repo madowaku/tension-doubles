@@ -91,8 +91,17 @@ local function totalHalfDepth()
 end
 
 local teamCount
+local getNetGuidanceForTeam
 
 local function broadcastState(message)
+	local netGuidance = nil
+	if getNetGuidanceForTeam then
+		netGuidance = {
+			Red = getNetGuidanceForTeam("Red"),
+			Blue = getNetGuidanceForTeam("Blue"),
+		}
+	end
+
 	MatchStateEvent:FireAllClients({
 		state = currentState,
 		redScore = score.Red,
@@ -103,6 +112,7 @@ local function broadcastState(message)
 		bluePlayers = teamCount("Blue"),
 		playersNeeded = Config.AllowGhostPartners and Config.MinPlayersToAutoStart or 4,
 		title = Config.Title,
+		netGuidance = netGuidance,
 	})
 end
 
@@ -770,6 +780,39 @@ local function getTeamPinInfo(teamName)
 	}
 end
 
+getNetGuidanceForTeam = function(teamName)
+	local a, b = getNetEndpoints(teamName)
+	if not a or not b then
+		return {
+			state = "Missing",
+			text = Config.NetGuideMakeText or "MAKE A NET",
+			distance = 0,
+			pinCount = 0,
+		}
+	end
+
+	local tensionState, distance = getTensionState(a, b)
+	local pinInfo = getTeamPinInfo(teamName)
+	local text = Config.NetGuideGoodText or "GOOD NET"
+	if tensionState == "Slack" then
+		text = Config.NetGuideTooCloseText or "MOVE APART"
+	elseif tensionState == "OverTension" or tensionState == "Broken" then
+		text = Config.NetGuideTooFarText or "TOO FAR"
+	elseif pinInfo.pinCount > 0 then
+		text = Config.NetGuidePinText or "HOLD PIN"
+	end
+	if pinInfo.pinCount >= 2 and tensionState == "Normal" then
+		text = Config.NetGuideHareText or "HARE READY!"
+	end
+
+	return {
+		state = tensionState,
+		text = text,
+		distance = math.floor(distance * 10) / 10,
+		pinCount = pinInfo.pinCount,
+	}
+end
+
 local function clampPlayersToCourt()
 	if not Config.ClampPlayersToCourt then
 		return
@@ -879,15 +922,15 @@ local function processGroundOrOut()
 
 	if isBallOutsideArena(pos) then
 		local losingTeam = ball.lastTouchedTeam or ((pos.Z >= 0) and "Red" or "Blue")
-		awardPoint(MathUtil.opponent(losingTeam), "OUT!", losingTeam)
+		awardPoint(MathUtil.opponent(losingTeam), Config.ScoreReasonOutText or "OUT!", losingTeam)
 		return true
 	end
 
 	if pos.Y <= Config.BallRadius then
 		if pos.Z >= 0 then
-			awardPoint("Blue", "DROP ON RED SIDE", "Red")
+			awardPoint("Blue", Config.ScoreReasonDropText or "DROP!", "Red")
 		else
-			awardPoint("Red", "DROP ON BLUE SIDE", "Blue")
+			awardPoint("Red", Config.ScoreReasonDropText or "DROP!", "Blue")
 		end
 		return true
 	end

@@ -1,9 +1,9 @@
 --!strict
--- Tension Doubles: PINTO HARE! / Roblox ver0.5.3
+-- Tension Doubles: PINTO HARE! / Roblox ver0.6.0
 -- Serve Balance Patch: serves now have their own tuned speed/arc so they reach the opponent court.
 
 local Config = {
-	Version = "0.5.3",
+	Version = "0.6.0",
 	Title = "Tension Doubles: PINTO HARE!",
 	Subtitle = "Hold PIN. Sync for HARE.",
 	ScoreToWin = 7,
@@ -119,6 +119,21 @@ local Config = {
 	TouchPortraitHint = "Rotate sideways for best play.",
 	DesktopHint = "Hold E / Space / Shift: PIN",
 	GamepadHint = "Hold R2 / X: PIN",
+	NetGuideMakeText = "MAKE A NET",
+	NetGuideGoodText = "GOOD NET",
+	NetGuideTooCloseText = "MOVE APART",
+	NetGuideTooFarText = "TOO FAR",
+	NetGuidePinText = "HOLD PIN",
+	NetGuideHareText = "HARE READY!",
+	ScoreReasonDropText = "DROP!",
+	ScoreReasonOutText = "OUT!",
+	ScoreReasonTooFarText = "TOO FAR!",
+	ScoreReasonHareText = "HARE POINT!",
+	HareCameraKick = 1.25,
+	HareComboCameraKick = 1.75,
+	NormalHitCameraKick = 0.34,
+	MobileNetGuideYLandscape = 0.805,
+	MobileNetGuideYPortrait = 0.815,
 
 	-- v0.5.1 Mobile Landscape & UI Fix.
 	PreferLandscape = true,
@@ -137,12 +152,12 @@ local Config = {
 	GhostPartnerVisible = false,
 	GhostPartTransparency = 1,
 	GhostPartSize = 0.55,
-	MobileCameraHeightLandscape = 90,
-	MobileCameraBackLandscape = 76,
-	MobileCameraFovLandscape = 66,
-	MobileCameraHeightPortrait = 102,
-	MobileCameraBackPortrait = 88,
-	MobileCameraFovPortrait = 70,
+	MobileCameraHeightLandscape = 94,
+	MobileCameraBackLandscape = 82,
+	MobileCameraFovLandscape = 68,
+	MobileCameraHeightPortrait = 106,
+	MobileCameraBackPortrait = 92,
+	MobileCameraFovPortrait = 72,
 }
 
 return Config

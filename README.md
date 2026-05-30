@@ -1,6 +1,17 @@
-# Tension Doubles: PINTO HARE! v0.5.3
+# Tension Doubles: PINTO HARE! v0.6.0
 
 Roblox prototype for a 2v2 co-op net sport.
+
+## v0.6 direction
+
+v0.6 focuses on the first 30 seconds:
+
+- make the partner-net concept readable
+- make PIN and HARE feel exciting
+- shorten score reasons for mobile readability
+- keep the game party-sport flavored, not simulation-heavy
+
+UGC spectacle, cosmetics, unlocks, and themed arenas are deferred to v0.7+.
 
 ## v0.5.3 focus
 
