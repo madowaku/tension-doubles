@@ -52,6 +52,24 @@ assertRegex(
 );
 
 assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "HareHoldWindow",
+  "holding PIN before contact should still allow HARE"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "HareRequiresFreshPin = false",
+  "v0.6 party HARE should reward sustained shared PIN instead of a strict contact-timing test"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "SoloGhostsMirrorPinning",
+  "solo party testing should let empty-side ghosts produce HARE moments"
+);
+
+assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
   "netGuidance",
   "match-state payload should expose net guidance"
@@ -61,6 +79,30 @@ assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
   "lastGuidanceBroadcast",
   "server should refresh net guidance during rallies"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "Config.HareHoldWindow",
+  "server HARE detection should accept sustained PIN holds"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "Config.HareRequiresFreshPin ~= false",
+  "server should make strict HARE contact timing optional for the party slice"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  'local fxType = "Normal"',
+  "normal returns should not be mislabeled as PIN"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "SoloGhostsMirrorPinning",
+  "server should mirror PIN to empty ghost teams only during solo testing"
 );
 
 assertRegex(
@@ -79,6 +121,12 @@ assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
   "HARE!!",
   "HARE should have a stronger party callout"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  'return "HIT!"',
+  "normal returns should read as a plain hit, not a PIN"
 );
 
 assertIncludes(

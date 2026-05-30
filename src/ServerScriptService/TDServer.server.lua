@@ -769,6 +769,19 @@ local function getTeamPinInfo(teamName)
 		maxStart = math.max(maxStart, realPinStart)
 	end
 
+	if Config.AllowGhostPartners and Config.SoloGhostsMirrorPinning and realCount == 0 and #Players:GetPlayers() == 1 then
+		-- Solo party test helper: empty-side ghosts can still create HARE moments.
+		for _, player in ipairs(Players:GetPlayers()) do
+			local state = playerState[player]
+			if state and state.IsPinning and getAliveRoot(player) then
+				pinCount = 2
+				minStart = state.LastPinStartTime
+				maxStart = state.LastPinStartTime
+				break
+			end
+		end
+	end
+
 	if pinCount == 0 then
 		minStart = -math.huge
 		maxStart = -math.huge
@@ -1098,7 +1111,12 @@ local function processNetHit(teamName)
 	if pinCount >= 2 and tensionState == "Normal" then
 		local pinDelta = pinInfo.maxStart - pinInfo.minStart
 		local contactWindow = now - pinInfo.maxStart
-		isHare = pinDelta <= Config.HarePinDelta and contactWindow <= Config.HareContactWindow
+		local hareWindow = math.max(Config.HareContactWindow or 0.45, Config.HareHoldWindow or 0)
+		if Config.HareRequiresFreshPin ~= false then
+			isHare = pinDelta <= Config.HarePinDelta and contactWindow <= hareWindow
+		else
+			isHare = pinDelta <= Config.HarePinDelta
+		end
 	end
 
 	local distanceBonus = 0
@@ -1134,7 +1152,7 @@ local function processNetHit(teamName)
 	local edgeWobble = netDir * ((t - 0.5) * 0.32)
 	local horizontal = MathUtil.safeUnit(returnDir * 0.78 + reflectedIncoming * 0.20 + edgeWobble, returnDir)
 
-	local fxType = "Pin"
+	local fxType = "Normal"
 	local lift = Config.ReturnLiftNormal or Config.ReturnLift
 
 	if tensionState == "Slack" then

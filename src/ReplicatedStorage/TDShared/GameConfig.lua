@@ -22,6 +22,7 @@ local Config = {
 	-- Dev/testing. Solo/2-player testing gets ghost partners so the rally loop works.
 	AllowGhostPartners = true,
 	GhostMirrorsPinning = true,
+	SoloGhostsMirrorPinning = true,
 	MinPlayersToAutoStart = 1, -- set to 4 for a stricter live game
 
 	-- Ball. v0.5.2 lowers PIN/HARE arcs so strong returns land in court more often.
@@ -54,6 +55,8 @@ local Config = {
 	HitCooldown = 0.25,
 	HarePinDelta = 0.30,
 	HareContactWindow = 0.45,
+	HareHoldWindow = 3.5,
+	HareRequiresFreshPin = false,
 
 	-- v0.5.2 Return Balance Patch. Keep PIN fun without making every good hit fly OUT.
 	PowerBonusSlack = -8,
