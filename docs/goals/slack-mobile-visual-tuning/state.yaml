@@ -1,0 +1,118 @@
+# Goal Maker v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Slack Mobile Visual Tuning"
+  slug: "slack-mobile-visual-tuning"
+  kind: specific
+  tranche: "Observe current Slack/HARE visual behavior, choose the first safe mobile-readability tuning slice, implement it if needed, verify it, and audit the result."
+  status: active
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+active_task: T001
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: active
+    reasoning_hint: medium
+    objective: "Observe current Slack/HARE visual implementation and runtime behavior with mobile readability in mind."
+    inputs:
+      - "docs/superpowers/specs/2026-05-30-tension-fiber-material-design.md"
+      - "docs/superpowers/specs/2026-05-30-tension-fiber-visual-punch-design.md"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "Roblox Studio Play observation through MCP when available"
+    constraints:
+      - "Read-only."
+      - "Do not edit implementation files."
+      - "Gather evidence before recommending numeric tuning."
+      - "Focus on Slack sag visibility, blue absorb ripple visibility, HARE hardening visibility, and mobile screen clarity."
+    expected_output:
+      - "Current relevant config values"
+      - "Studio runtime observation summary"
+      - "Whether Slack state can be produced and observed through MCP"
+      - "Mobile readability risks"
+      - "Candidate Worker task with exact allowed_files, verify, and stop_if if tuning is needed"
+    receipt: null
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Decide the first safe tuning slice by impact, confidence, reversibility, and verification strength."
+    inputs:
+      - "T001 receipt"
+      - "Original user request: make Slack sag and absorb ripple readable, especially for mobile players"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Prefer config-only changes if they address the observation."
+      - "Reject changes that obscure the ball or make mobile HUD clutter worse."
+    expected_output:
+      - "Decision"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred tasks"
+    receipt: null
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: queued
+    reasoning_hint: default
+    objective: "Execute the first safe Slack/mobile visual tuning task selected by Judge."
+    allowed_files: []
+    verify: []
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Need product direction beyond Slack/mobile readability."
+      - "Verification fails twice for the same reason."
+      - "Studio runtime cannot be controlled enough to validate the selected change."
+    receipt: null
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether the current tranche satisfies Slack/mobile visual readability."
+    inputs:
+      - "All done task receipts"
+      - "Last verification"
+      - "Current dirty diff"
+      - "Original user request"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Reject completion if a required Worker task is still queued or active."
+    expected_output:
+      - "complete | not_complete"
+      - "missing evidence"
+      - "mapping to Slack/mobile readability"
+      - "next task if not complete"
+    receipt: null
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: unknown
+    task: null
+    commands: []
