@@ -99,6 +99,18 @@ assertIncludes(
   "mobile HUD vertical positions should be config-driven for RC polish"
 );
 
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "LandingTargetOutColor",
+  "landing target marker should have an explicit OUT color for mobile readability"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "HareSubtitleText",
+  "HARE subtitle should be config-driven"
+);
+
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
   /GoodDistanceMax\s*=\s*18/,
@@ -189,6 +201,24 @@ assertIncludes(
   "server should mirror PIN to empty ghost teams only during solo testing"
 );
 
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "TD_LandingTargetMarker",
+  "server should create a visible landing target marker"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "predictBallLanding",
+  "server should predict the ball landing target for mobile readability"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "TD_HareSparkColumn",
+  "HARE should spawn a named vertical spark effect"
+);
+
 assertRegex(
   "src/ServerScriptService/TDServer.server.lua",
   /awardPoint\([^\n]+,\s*(Config\.ScoreReasonDropText or )?"DROP!"/,
@@ -232,6 +262,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.HareSubtitleText",
+  "HARE subtitle should come from config"
+);
+
+assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDCameraClient.client.lua",
   "HareCameraKick",
   "camera feedback should use config-driven HARE kick"
@@ -259,6 +295,12 @@ assertIncludes(
   "docs/playtests/v06-rc-checklist.md",
   "Mobile landscape",
   "RC checklist should include mobile landscape sanity"
+);
+
+assertIncludes(
+  "docs/playtests/v06-rc-checklist.md",
+  "landing target",
+  "RC checklist should ask testers to verify the landing target"
 );
 
 console.log("v0.6 guided party source checks passed");

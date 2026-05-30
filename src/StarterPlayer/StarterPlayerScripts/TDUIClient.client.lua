@@ -337,14 +337,16 @@ local function showFloatingFx(fxType, teamName, rallyCount, comboCount)
 
 	if fxType == "Hare" then
 		playHareFlash(comboCount)
+		local hareSubtitle = Config.HareSubtitleText or "TEAM SYNC!"
 		if comboCount and comboCount >= 2 then
-			subMessageLabel.Text = "TEAM SYNC!"
-			task.delay(0.95, function()
-				if subMessageLabel.Text == "TEAM SYNC!" then
-					subMessageLabel.Text = ""
-				end
-			end)
+			hareSubtitle = hareSubtitle .. " x" .. tostring(comboCount)
 		end
+		subMessageLabel.Text = hareSubtitle
+		task.delay(0.95, function()
+			if subMessageLabel.Text == hareSubtitle then
+				subMessageLabel.Text = ""
+			end
+		end)
 	end
 
 	local tween = TweenService:Create(label, TweenInfo.new(fxType == "Hare" and 1.10 or 0.82, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {

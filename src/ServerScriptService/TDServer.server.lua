@@ -60,6 +60,8 @@ local lastGuidanceBroadcast = 0
 local teamBeams = {}
 local pinIndicators = {}
 local ghostPartners = { Red = {}, Blue = {} }
+local landingTargetMarker = nil
+local lastLandingTargetUpdate = 0
 
 local ball = {
 	part = nil,
@@ -93,6 +95,7 @@ end
 
 local teamCount
 local getNetGuidanceForTeam
+local isBallOutsideArena
 
 local function broadcastState(message)
 	local netGuidance = nil
@@ -181,6 +184,7 @@ local function clearGeneratedCourt()
 	end
 	teamBeams = {}
 	pinIndicators = {}
+	landingTargetMarker = nil
 end
 
 local function createSpawn(name, pos)
@@ -407,6 +411,98 @@ local function ensureBallPart()
 	part.Parent = workspace
 	ball.part = part
 	return part
+end
+
+local function ensureLandingTargetMarker()
+	if landingTargetMarker and landingTargetMarker.Parent then
+		return landingTargetMarker
+	end
+
+	local marker = Instance.new("Part")
+	marker.Name = "TD_LandingTargetMarker"
+	marker.Shape = Enum.PartType.Cylinder
+	marker.Anchored = true
+	marker.CanCollide = false
+	marker.CanQuery = false
+	marker.CanTouch = false
+	marker.CastShadow = false
+	local size = Config.LandingTargetSize or 5.8
+	marker.Size = Vector3.new(Config.LandingTargetThickness or 0.09, size, size)
+	marker.Material = Enum.Material.Neon
+	marker.Color = Config.LandingTargetInColor or Color3.fromRGB(255, 240, 130)
+	marker.Transparency = 1
+	marker.CFrame = CFrame.new(0, -1000, 0)
+	marker.Parent = VisualsFolder
+	landingTargetMarker = marker
+	return marker
+end
+
+local function hideLandingTargetMarker()
+	local marker = landingTargetMarker
+	if marker and marker.Parent then
+		marker.Transparency = 1
+		marker.CFrame = CFrame.new(0, -1000, 0)
+	end
+end
+
+local function predictBallLanding()
+	local maxTime = Config.LandingTargetMaxPredictionTime or 2.4
+	local gravity = Config.BallGravity or 42
+	local targetY = Config.BallRadius or 1.72
+	local y0 = ball.position.Y
+	local vy = ball.velocity.Y
+	local a = -0.5 * gravity
+	local b = vy
+	local c = y0 - targetY
+	local t = maxTime
+	local discriminant = b * b - 4 * a * c
+
+	if discriminant >= 0 and a ~= 0 then
+		local sqrtDiscriminant = math.sqrt(discriminant)
+		local t1 = (-b + sqrtDiscriminant) / (2 * a)
+		local t2 = (-b - sqrtDiscriminant) / (2 * a)
+		local best = math.huge
+		if t1 > 0 then
+			best = math.min(best, t1)
+		end
+		if t2 > 0 then
+			best = math.min(best, t2)
+		end
+		if best < math.huge then
+			t = math.min(best, maxTime)
+		end
+	end
+
+	local predicted = ball.position + ball.velocity * t + Vector3.new(0, -0.5 * gravity * t * t, 0)
+	local out = isBallOutsideArena(predicted)
+	local clampedX = math.clamp(predicted.X, -halfWidth(), halfWidth())
+	local clampedZ = math.clamp(predicted.Z, -totalHalfDepth(), totalHalfDepth())
+	return Vector3.new(clampedX, 0.33, clampedZ), out
+end
+
+local function updateLandingTargetMarker()
+	if Config.LandingTargetEnabled == false then
+		hideLandingTargetMarker()
+		return
+	end
+	if not ball.active or not roundActive then
+		hideLandingTargetMarker()
+		return
+	end
+
+	local now = os.clock()
+	if now - lastLandingTargetUpdate < (Config.LandingTargetUpdateInterval or 0.08) then
+		return
+	end
+	lastLandingTargetUpdate = now
+
+	local marker = ensureLandingTargetMarker()
+	local position, out = predictBallLanding()
+	local size = Config.LandingTargetSize or 5.8
+	marker.Size = Vector3.new(Config.LandingTargetThickness or 0.09, size, size)
+	marker.Color = out and (Config.LandingTargetOutColor or Color3.fromRGB(255, 80, 80)) or (Config.LandingTargetInColor or Color3.fromRGB(255, 240, 130))
+	marker.Transparency = out and (Config.LandingTargetOutTransparency or 0.12) or (Config.LandingTargetTransparency or 0.28)
+	marker.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
 end
 
 local getAliveRoot
@@ -911,6 +1007,7 @@ local function hideBall()
 		ball.part.Transparency = 1
 		ball.part.CFrame = CFrame.new(0, -100, 0)
 	end
+	hideLandingTargetMarker()
 end
 
 local spawnShockwave
@@ -940,7 +1037,7 @@ local function awardPoint(scoringTeam, reason, losingTeam)
 	setState("PointScored", text)
 end
 
-local function isBallOutsideArena(pos)
+isBallOutsideArena = function(pos)
 	return math.abs(pos.X) > halfWidth() or math.abs(pos.Z) > totalHalfDepth()
 end
 
@@ -1048,6 +1145,32 @@ spawnShockwave = function(position, color, size, duration, name)
 		Transparency = 1,
 	}):Play()
 	Debris:AddItem(wave, duration + 0.1)
+end
+
+local function spawnHareSparkColumn(position)
+	local duration = Config.HareSparkColumnDuration or 0.34
+	local height = Config.HareSparkColumnHeight or 18
+	local width = Config.HareSparkColumnWidth or 1.4
+	local spark = Instance.new("Part")
+	spark.Name = "TD_HareSparkColumn"
+	spark.Shape = Enum.PartType.Cylinder
+	spark.Anchored = true
+	spark.CanCollide = false
+	spark.CanQuery = false
+	spark.CanTouch = false
+	spark.CastShadow = false
+	spark.Material = Enum.Material.Neon
+	spark.Color = Color3.fromRGB(255, 240, 120)
+	spark.Transparency = 0.18
+	spark.Size = Vector3.new(height, width, width)
+	spark.CFrame = CFrame.new(position.X, height / 2, position.Z) * CFrame.Angles(0, 0, math.rad(90))
+	spark.Parent = VisualsFolder
+
+	TweenService:Create(spark, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(height * 1.10, width * 2.2, width * 2.2),
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(spark, duration + 0.1)
 end
 
 local function fireHitFx(fxType, position, teamName)
@@ -1235,6 +1358,7 @@ local function processNetHit(teamName)
 		ball.pausedUntil = now + Config.HareFreezeTime
 		spawnShockwave(closest, BEAM_COLORS.Hare, Config.HareShockwaveSize, Config.HareShockwaveDuration, "TD_HareShockwave")
 		spawnShockwave(closest, Color3.fromRGB(255, 246, 160), Config.HareHardeningRingSize or 16, Config.HareHardeningRingDuration or 0.30, "TD_HareHardeningRing")
+		spawnHareSparkColumn(closest)
 		pulseArena(teamName)
 	end
 
@@ -1394,6 +1518,7 @@ RunService.Heartbeat:Connect(function(dt)
 	updateTeamBeam("Red")
 	updateTeamBeam("Blue")
 	updateBall(dt)
+	updateLandingTargetMarker()
 
 	if roundActive and currentState == "Rally" then
 		local now = os.clock()

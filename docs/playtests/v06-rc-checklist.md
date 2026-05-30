@@ -12,7 +12,8 @@ Use this checklist before treating v0.6 as a release candidate.
 
 - Confirm the onboarding says players make a Tension Fiber net with their partner.
 - Confirm `FIBER SAG`, `TENSION OK`, and `HARE READY!` are readable without opening a long tutorial.
-- Confirm the player can see the ball, the partner fiber, and the landing side during the first rally.
+- Confirm the player can see the ball, the partner fiber, and the landing target during the first rally.
+- Confirm the landing target turns urgent/red when the predicted ball path is OUT.
 - Confirm score reasons use short copy such as `DROP!` and `OUT!`.
 
 ## Solo
@@ -38,8 +39,8 @@ Use this checklist before treating v0.6 as a release candidate.
 ## Mobile landscape
 
 - Confirm the PIN button does not cover score, net guidance, or point reason.
-- Confirm the ball and Tension Fiber remain visible during serve and first return.
-- Confirm `HARE!!` is exciting but does not hide the rally for too long.
+- Confirm the ball, Tension Fiber, and landing target remain visible during serve and first return.
+- Confirm `HARE!!`, the spark column, and the subtitle are exciting but do not hide the rally for too long.
 
 ## Mobile portrait
 

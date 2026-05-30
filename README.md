@@ -8,6 +8,7 @@ v0.6 focuses on the first 30 seconds:
 
 - make the partner-net concept readable
 - make PIN and HARE feel exciting
+- show a clear landing target during rallies
 - shorten score reasons for mobile readability
 - keep the game party-sport flavored, not simulation-heavy
 
@@ -49,6 +50,8 @@ MinPlayersToAutoStart = 4
 ## v0.6 RC checklist
 
 Use [docs/playtests/v06-rc-checklist.md](docs/playtests/v06-rc-checklist.md) before treating v0.6 as a release candidate.
+
+The most important mobile check is now: ball, Tension Fiber, landing target, and point reason must all remain readable at the same time.
 
 ## Tuning knobs
 
