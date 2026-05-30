@@ -17,6 +17,7 @@ local Config = require(ReplicatedStorage:WaitForChild("TDShared"):WaitForChild("
 
 local isTouch = UserInputService.TouchEnabled
 local isGamepad = UserInputService.GamepadEnabled and not isTouch
+local subMessageHoldUntil = 0
 
 local function preferLandscape()
 	if not isTouch or Config.PreferLandscape == false then
@@ -342,6 +343,7 @@ local function showFloatingFx(fxType, teamName, rallyCount, comboCount)
 			hareSubtitle = hareSubtitle .. " x" .. tostring(comboCount)
 		end
 		subMessageLabel.Text = hareSubtitle
+		subMessageHoldUntil = os.clock() + 1.05
 		task.delay(0.95, function()
 			if subMessageLabel.Text == hareSubtitle then
 				subMessageLabel.Text = ""
@@ -429,9 +431,12 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 		subMessageLabel.Text = Config.ServingSubMessage or "Track the ball!"
 	elseif state == "Rally" then
 		messageLabel.Text = ""
-		subMessageLabel.Text = Config.RallySubMessage or ""
+		if os.clock() >= subMessageHoldUntil then
+			subMessageLabel.Text = Config.RallySubMessage or ""
+		end
 	elseif state == "PointScored" then
 		setMessage(message, 4)
+		subMessageHoldUntil = 0
 		subMessageLabel.Text = Config.PointSubMessage or "NEXT SERVE!"
 	elseif state == "GameOver" then
 		setMessage(message ~= "" and message or "GAME SET!", 4)

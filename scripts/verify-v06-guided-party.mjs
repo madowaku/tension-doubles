@@ -268,6 +268,12 @@ assertIncludes(
 );
 
 assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "subMessageHoldUntil",
+  "temporary HARE subtitles should survive frequent rally guidance broadcasts"
+);
+
+assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDCameraClient.client.lua",
   "HareCameraKick",
   "camera feedback should use config-driven HARE kick"
