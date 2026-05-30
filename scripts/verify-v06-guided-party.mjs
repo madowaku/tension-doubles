@@ -107,8 +107,26 @@ assertIncludes(
 
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
-  /MobileCameraHeightLandscape\s*=\s*68/,
-  "mobile landscape camera should be closer so the court fills the screen"
+  /MobileCameraHeightLandscape\s*=\s*52/,
+  "mobile landscape camera should be close enough that the court fills the screen"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /MobilePinButtonScaleLandscape\s*=\s*0\.145/,
+  "mobile landscape PIN button should leave more playfield visible"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /LandingTargetSize\s*=\s*7\.2/,
+  "mobile landing target should be large enough to see in landscape"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "MobileNetGuideBgTransparencyLandscape",
+  "mobile landscape net guidance should not read as a heavy blocking bar"
 );
 
 assertIncludes(

@@ -140,7 +140,8 @@ local function applyResponsiveLayout()
 		hintLabel.Text = deviceHintText(portrait)
 		netGuideLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileNetGuideYPortrait or 0.815) or (Config.MobileNetGuideYLandscape or 0.805))
 		netGuideLabel.Size = UDim2.fromScale(portrait and (Config.MobileNetGuideWidthPortrait or 0.72) or (Config.MobileNetGuideWidthLandscape or 0.60), portrait and 0.060 or 0.064)
-		netGuideLabel.TextSize = portrait and 18 or 20
+		netGuideLabel.TextSize = portrait and 18 or 18
+		netGuideLabel.BackgroundTransparency = portrait and 0.42 or (Config.MobileNetGuideBgTransparencyLandscape or 0.56)
 		rotateHint.Visible = Config.ShowRotateHint ~= false and portrait
 		if Config.MobileRotateHintNonBlocking ~= false then
 			rotateHint.Position = UDim2.fromScale(0.5, 0.405)
@@ -162,6 +163,7 @@ local function applyResponsiveLayout()
 		netGuideLabel.Position = UDim2.fromScale(0.5, 0.82)
 		netGuideLabel.Size = UDim2.fromScale(0.46, 0.062)
 		netGuideLabel.TextSize = 22
+		netGuideLabel.BackgroundTransparency = 0.38
 		rotateHint.Visible = false
 	end
 end
