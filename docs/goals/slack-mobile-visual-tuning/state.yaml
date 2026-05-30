@@ -8,7 +8,7 @@ goal:
   slug: "slack-mobile-visual-tuning"
   kind: specific
   tranche: "Observe current Slack/HARE visual behavior, choose the first safe mobile-readability tuning slice, implement it if needed, verify it, and audit the result."
-  status: active
+  status: blocked
 
 rules:
   pm_owns_state: true
@@ -24,13 +24,13 @@ agents:
   worker: installed
   judge: installed
 
-active_task: T001
+active_task: null
 
 tasks:
   - id: T001
     type: scout
     assignee: Scout
-    status: active
+    status: done
     reasoning_hint: medium
     objective: "Observe current Slack/HARE visual implementation and runtime behavior with mobile readability in mind."
     inputs:
@@ -51,11 +51,68 @@ tasks:
       - "Whether Slack state can be produced and observed through MCP"
       - "Mobile readability risks"
       - "Candidate Worker task with exact allowed_files, verify, and stop_if if tuning is needed"
-    receipt: null
+    receipt:
+      result: done
+      summary: "Static source inspection found Slack/HARE visual punch wired, but runtime Studio observation could not run because no active Roblox Studio MCP instance was connected."
+      current_config_values:
+        SlackDistance: 8
+        BeamCurveSlack: 4.6
+        BeamWidthSlack: 1.25
+        BeamSlackTransparency: 0.32
+        SlackAbsorbRippleSize: 9
+        SlackAbsorbRippleDuration: 0.34
+        BeamWidthHareBonus: 1.18
+        BeamHareTransparency: 0.0
+        HareHardeningRingSize: 16
+        HareHardeningRingDuration: 0.30
+        HareShockwaveSize: 22
+        HareShockwaveDuration: 0.52
+        HareGlowBrightness: 4.4
+        HareTrailLifetime: 0.56
+      implementation_summary:
+        - "TDServer updates Beam width/transparency/curve/color per tension state."
+        - "Slack hit spawns TD_SlackAbsorbRipple at the contact point."
+        - "HARE hit spawns TD_HareShockwave and TD_HareHardeningRing, then pulses arena."
+        - "Ball color, point light, and trail are strengthened for HARE and tinted for Slack."
+        - "TDUIClient renders net guidance and floating SLACK!/HARE!! callouts with mobile sizes."
+      mobile_readability_risks:
+        - "Slack beam is much narrower than normal, 1.25 vs 2.2, and more transparent, so it may be too subtle on mobile despite BeamCurveSlack 4.6."
+        - "Slack absorb ripple lasts only 0.34s and is floor-level, so it may be easy to miss on mobile."
+        - "HARE hardening ring is smaller/shorter than the existing shockwave, 16/0.30s vs 22/0.52s, so distinction may be weak."
+        - "Solo ghost testing can produce HARE hit logic, but HARE beam hardening uses countRealPinning, so solo tests may not show the gold thick beam."
+        - "Slack is not naturally produced by default solo ghost spacing; observing Slack likely needs two real players or deliberate Studio setup."
+      runtime_observation:
+        status: blocked
+        reason: "Roblox Studio MCP returned no active Studio instances."
+        slack_state_observable_through_mcp: "unknown_until_studio_active"
+      verification:
+        - cmd: "node scripts/verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+      evidence:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "scripts/verify-v06-guided-party.mjs"
+      worker_likely_needed: true
+      candidate_worker_task:
+        objective: "Tune only numeric Slack/HARE visual config for mobile readability after Studio observation, keeping existing server behavior and HUD logic unchanged."
+        allowed_files:
+          - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        verify:
+          - "node scripts/verify-v06-guided-party.mjs"
+          - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          - "Studio Play: observe Slack beam sag/ripple and HARE ring/beam; confirm no Lua errors."
+        stop_if:
+          - "Need to change server logic such as HARE beam pin counting or forced Slack setup."
+          - "Studio runtime/MCP remains unavailable for visual validation."
+          - "Tuning obscures ball visibility or crowds mobile HUD."
+          - "Rojo build or source verifier fails twice."
   - id: T002
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Decide the first safe tuning slice by impact, confidence, reversibility, and verification strength."
     inputs:
@@ -73,21 +130,60 @@ tasks:
       - "verify"
       - "stop_if"
       - "Deferred tasks"
-    receipt: null
+    receipt:
+      result: done
+      decision: "Require Studio reconnect before tuning. Source-only numeric prep is not aligned because the user explicitly wants actual Slack state observation and T001 could not observe runtime Slack."
+      evidence:
+        - "T001 source verifier passed and Rojo build passed."
+        - "T001 found Slack/HARE visuals are already wired through GameConfig numeric values."
+        - "T001 runtime observation was blocked because Roblox Studio MCP had no active Studio instance."
+        - "T001 risks are visual and observation-dependent: Slack beam/ripple subtlety and HARE ring distinction."
+      next_allowed_task: T003
+      exact_worker_objective: "With an active Roblox Studio MCP/Play session, observe actual Slack sag and absorb ripple on a mobile/small viewport; if readability is weak, tune only Slack/HARE numeric visual config in GameConfig.lua, preserving ball visibility and HUD clarity."
+      allowed_files:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      verify:
+        - "node scripts/verify-v06-guided-party.mjs"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+        - "Studio Play via MCP: reproduce/observe Slack state, confirm sagging beam and TD_SlackAbsorbRipple readability on mobile/small viewport, confirm no Lua errors."
+        - "Studio Play via MCP: spot-check HARE feedback still readable and does not obscure ball/mobile HUD."
+      stop_if:
+        - "Roblox Studio MCP still has no active Studio instance."
+        - "Slack state cannot be produced or observed well enough to justify tuning."
+        - "Needed change is outside GameConfig.lua."
+        - "Need server logic changes, forced Slack setup code, HUD redesign, particles/assets, or gameplay semantics changes."
+        - "Any tuning obscures the ball, partner net, landing target, score reason, PIN/HARE feedback, or mobile HUD."
+        - "Local verifier or Rojo build fails twice for the same reason."
+      deferred_tasks:
+        - "Mobile HUD/layout redesign."
+        - "HARE beam hardening logic changes for solo testing."
+        - "Device-only human mobile QA beyond Studio/MCP observation."
   - id: T003
     type: worker
     assignee: Worker
-    status: queued
+    status: blocked
     reasoning_hint: default
-    objective: "Execute the first safe Slack/mobile visual tuning task selected by Judge."
-    allowed_files: []
-    verify: []
+    objective: "With an active Roblox Studio MCP/Play session, observe actual Slack sag and absorb ripple on a mobile/small viewport; if readability is weak, tune only Slack/HARE numeric visual config in GameConfig.lua, preserving ball visibility and HUD clarity."
+    allowed_files:
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+    verify:
+      - "node scripts/verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+      - "Studio Play via MCP: reproduce/observe Slack state, confirm sagging beam and TD_SlackAbsorbRipple readability on mobile/small viewport, confirm no Lua errors."
+      - "Studio Play via MCP: spot-check HARE feedback still readable and does not obscure ball/mobile HUD."
     stop_if:
       - "Need files outside allowed_files."
       - "Need product direction beyond Slack/mobile readability."
       - "Verification fails twice for the same reason."
       - "Studio runtime cannot be controlled enough to validate the selected change."
-    receipt: null
+    receipt:
+      result: blocked
+      summary: "Worker cannot start because Roblox Studio MCP has no active Studio instance. Judge explicitly rejected source-only numeric tuning before actual Slack runtime observation."
+      commands:
+        - cmd: "mcp__Roblox_Studio.list_roblox_studios"
+          status: blocked
+          note: "Returned zero connected Studio instances."
+      next_unblock_step: "Reconnect Roblox Studio MCP, then resume T003 to observe Slack state before tuning."
   - id: T999
     type: judge
     assignee: Judge
@@ -113,6 +209,7 @@ tasks:
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: blocked
+    task: T003
+    commands:
+      - "mcp__Roblox_Studio.list_roblox_studios returned no active Studio instances"
