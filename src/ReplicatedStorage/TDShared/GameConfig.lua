@@ -82,7 +82,7 @@ local Config = {
 	-- Match pacing.
 	PointDelay = 1.45,
 	CountdownTime = 3,
-	GameOverDelay = 5,
+	GameOverDelay = 3.5,
 
 	-- Visuals. Thicker Beam and clearer ball for phone screens.
 	BeamWidth = 2.2,
@@ -117,6 +117,10 @@ local Config = {
 	PinRingHeight = 0.12,
 	WaitingMessage = "Waiting for players...",
 	StartMessage = "PINTO HARE!",
+	WaitingSubMessage = "Make a net. Hold PIN. Sync HARE.",
+	GameOverSubMessage = "NEXT MATCH INCOMING!",
+	FailSubtitleDropText = "LANDING MISSED!",
+	FailSubtitleOutText = "TOO MUCH POWER!",
 
 	-- v0.4 Court & Juice Patch.
 	CourtJuiceEnabled = true,
@@ -181,6 +185,8 @@ local Config = {
 	-- v0.5.1 Mobile Landscape & UI Fix.
 	PreferLandscape = true,
 	ShowRotateHint = true,
+	MobileRotateHintNonBlocking = true,
+	MobileRotateHintText = "Best in landscape",
 	MobileHintFadeDelay = 7.0,
 	MobileScoreYLandscape = 0.105,
 	MobileScoreYPortrait = 0.095,
@@ -201,12 +207,12 @@ local Config = {
 	GhostPartnerVisible = false,
 	GhostPartTransparency = 1,
 	GhostPartSize = 0.55,
-	MobileCameraHeightLandscape = 94,
-	MobileCameraBackLandscape = 82,
-	MobileCameraFovLandscape = 68,
-	MobileCameraHeightPortrait = 106,
-	MobileCameraBackPortrait = 92,
-	MobileCameraFovPortrait = 72,
+	MobileCameraHeightLandscape = 68,
+	MobileCameraBackLandscape = 58,
+	MobileCameraFovLandscape = 58,
+	MobileCameraHeightPortrait = 92,
+	MobileCameraBackPortrait = 76,
+	MobileCameraFovPortrait = 66,
 	PlaytestProfiles = {
 		Solo = "AllowGhostPartners=true, MinPlayersToAutoStart=1",
 		TwoPlayer = "Ghost support allowed while each side learns the loop",

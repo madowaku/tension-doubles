@@ -101,6 +101,36 @@ assertIncludes(
 
 assertIncludes(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "MobileRotateHintNonBlocking",
+  "portrait rotate guidance should not block play"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /MobileCameraHeightLandscape\s*=\s*68/,
+  "mobile landscape camera should be closer so the court fills the screen"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "GameOverSubMessage",
+  "game over should have a clear replay loop message"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "WaitingSubMessage",
+  "lobby/waiting state should teach the party sport loop"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "FailSubtitleDropText",
+  "drop/out failures should have party-readable feedback"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
   "LandingTargetOutColor",
   "landing target marker should have an explicit OUT color for mobile readability"
 );
@@ -271,6 +301,24 @@ assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
   "subMessageHoldUntil",
   "temporary HARE subtitles should survive frequent rally guidance broadcasts"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "MobileRotateHintNonBlocking",
+  "portrait rotate guidance should be a non-blocking hint"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.GameOverSubMessage",
+  "game over HUD should explain the replay loop"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.FailSubtitleDropText",
+  "failure subtitles should be config-driven"
 );
 
 assertIncludes(

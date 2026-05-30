@@ -72,12 +72,12 @@ netGuideLabel.Text = ""
 local rotateHint = Instance.new("Frame")
 rotateHint.Name = "RotateHint"
 rotateHint.AnchorPoint = Vector2.new(0.5, 0.5)
-rotateHint.Position = UDim2.fromScale(0.5, 0.56)
-rotateHint.Size = UDim2.fromScale(0.76, 0.13)
+rotateHint.Position = UDim2.fromScale(0.5, 0.405)
+rotateHint.Size = UDim2.fromScale(0.62, 0.068)
 rotateHint.BackgroundColor3 = Color3.fromRGB(8, 12, 22)
-rotateHint.BackgroundTransparency = 0.12
+rotateHint.BackgroundTransparency = 0.34
 rotateHint.Visible = false
-rotateHint.ZIndex = 50
+rotateHint.ZIndex = 14
 rotateHint.Parent = gui
 
 local rotateCorner = Instance.new("UICorner")
@@ -86,22 +86,22 @@ rotateCorner.Parent = rotateHint
 
 local rotateStroke = Instance.new("UIStroke")
 rotateStroke.Color = Color3.fromRGB(255, 220, 90)
-rotateStroke.Thickness = 2
-rotateStroke.Transparency = 0.15
+rotateStroke.Thickness = 1.5
+rotateStroke.Transparency = 0.30
 rotateStroke.Parent = rotateHint
 
 local rotateLabel = Instance.new("TextLabel")
 rotateLabel.BackgroundTransparency = 1
 rotateLabel.Size = UDim2.fromScale(0.94, 0.86)
 rotateLabel.Position = UDim2.fromScale(0.03, 0.07)
-rotateLabel.Text = "Rotate sideways for best play"
+rotateLabel.Text = Config.MobileRotateHintText or "Best in landscape"
 rotateLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 rotateLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
 rotateLabel.TextStrokeTransparency = 0.25
 rotateLabel.Font = Enum.Font.GothamBlack
 rotateLabel.TextScaled = true
 rotateLabel.TextWrapped = true
-rotateLabel.ZIndex = 51
+rotateLabel.ZIndex = 15
 rotateLabel.Parent = rotateHint
 
 local function isPortrait()
@@ -142,6 +142,13 @@ local function applyResponsiveLayout()
 		netGuideLabel.Size = UDim2.fromScale(portrait and (Config.MobileNetGuideWidthPortrait or 0.72) or (Config.MobileNetGuideWidthLandscape or 0.60), portrait and 0.060 or 0.064)
 		netGuideLabel.TextSize = portrait and 18 or 20
 		rotateHint.Visible = Config.ShowRotateHint ~= false and portrait
+		if Config.MobileRotateHintNonBlocking ~= false then
+			rotateHint.Position = UDim2.fromScale(0.5, 0.405)
+			rotateHint.Size = UDim2.fromScale(0.62, 0.068)
+			rotateHint.BackgroundTransparency = 0.34
+			rotateHint.ZIndex = 14
+			rotateLabel.ZIndex = 15
+		end
 	else
 		scoreLabel.Position = UDim2.fromScale(0.5, 0.065)
 		scoreLabel.TextSize = 36
@@ -418,9 +425,9 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 		showOnboardingOnce()
 		setMessage("WAITING", 0)
 		if message ~= "" then
-			subMessageLabel.Text = message
+			subMessageLabel.Text = Config.WaitingSubMessage or message
 		else
-			subMessageLabel.Text = string.format("Red %d/2 - Blue %d/2", data.redPlayers or 0, data.bluePlayers or 0)
+			subMessageLabel.Text = Config.WaitingSubMessage or string.format("Red %d/2 - Blue %d/2", data.redPlayers or 0, data.bluePlayers or 0)
 		end
 	elseif state == "Countdown" then
 		showOnboardingOnce()
@@ -437,10 +444,16 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 	elseif state == "PointScored" then
 		setMessage(message, 4)
 		subMessageHoldUntil = 0
-		subMessageLabel.Text = Config.PointSubMessage or "NEXT SERVE!"
+		if string.find(message, "DROP!", 1, true) then
+			subMessageLabel.Text = Config.FailSubtitleDropText or Config.PointSubMessage or "NEXT SERVE!"
+		elseif string.find(message, "OUT!", 1, true) then
+			subMessageLabel.Text = Config.FailSubtitleOutText or Config.PointSubMessage or "NEXT SERVE!"
+		else
+			subMessageLabel.Text = Config.PointSubMessage or "NEXT SERVE!"
+		end
 	elseif state == "GameOver" then
 		setMessage(message ~= "" and message or "GAME SET!", 4)
-		subMessageLabel.Text = "PLAY AGAIN!"
+		subMessageLabel.Text = Config.GameOverSubMessage or "NEXT MATCH INCOMING!"
 	else
 		setMessage(message ~= "" and message or state, 0)
 		subMessageLabel.Text = ""
