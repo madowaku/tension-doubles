@@ -34,9 +34,33 @@ assertIncludes(
 );
 
 assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "NetGuidanceBroadcastInterval",
+  "live net guidance should have a throttled broadcast interval"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /GoodDistanceMax\s*=\s*18/,
+  "party-sport normal net band should be a little more forgiving"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /HareContactWindow\s*=\s*0\.45/,
+  "HARE timing should be forgiving enough for the first 30 seconds"
+);
+
+assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
   "netGuidance",
   "match-state payload should expose net guidance"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "lastGuidanceBroadcast",
+  "server should refresh net guidance during rallies"
 );
 
 assertRegex(

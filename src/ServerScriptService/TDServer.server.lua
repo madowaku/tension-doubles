@@ -55,6 +55,7 @@ local winningTeam = nil
 local rallyHitCount = 0
 local hareCombo = { Red = 0, Blue = 0 }
 local lastHareTime = { Red = -math.huge, Blue = -math.huge }
+local lastGuidanceBroadcast = 0
 
 local teamBeams = {}
 local pinIndicators = {}
@@ -1357,6 +1358,14 @@ RunService.Heartbeat:Connect(function(dt)
 	updateTeamBeam("Red")
 	updateTeamBeam("Blue")
 	updateBall(dt)
+
+	if roundActive and currentState == "Rally" then
+		local now = os.clock()
+		if now - lastGuidanceBroadcast >= (Config.NetGuidanceBroadcastInterval or 0.18) then
+			lastGuidanceBroadcast = now
+			broadcastState("")
+		end
+	end
 end)
 
 -- Bootstrap existing players in Studio hot-reload sessions.

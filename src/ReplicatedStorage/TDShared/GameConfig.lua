@@ -46,14 +46,14 @@ local Config = {
 	-- Tension distance bands. Distance is between the two net endpoints.
 	SlackDistance = 8,
 	GoodDistanceMin = 8,
-	GoodDistanceMax = 16,
+	GoodDistanceMax = 18,
 	OverDistanceMin = 16,
 	BrokenDistance = 23,
 
 	-- Hit windows. A little kinder on mobile.
 	HitCooldown = 0.25,
-	HarePinDelta = 0.24,
-	HareContactWindow = 0.31,
+	HarePinDelta = 0.30,
+	HareContactWindow = 0.45,
 
 	-- v0.5.2 Return Balance Patch. Keep PIN fun without making every good hit fly OUT.
 	PowerBonusSlack = -8,
@@ -125,6 +125,7 @@ local Config = {
 	NetGuideTooFarText = "TOO FAR",
 	NetGuidePinText = "HOLD PIN",
 	NetGuideHareText = "HARE READY!",
+	NetGuidanceBroadcastInterval = 0.18,
 	ScoreReasonDropText = "DROP!",
 	ScoreReasonOutText = "OUT!",
 	ScoreReasonTooFarText = "TOO FAR!",
