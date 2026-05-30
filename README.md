@@ -31,12 +31,24 @@ AllowGhostPartners = true
 MinPlayersToAutoStart = 1
 ```
 
+## Solo / 2-player / 4-player RC checks
+
+v0.6 is still tuned for fast iteration, but the player-count expectations should be checked separately:
+
+- **Solo:** keep `AllowGhostPartners = true` and `MinPlayersToAutoStart = 1`. Confirm the match starts, Tension Fiber guidance appears, and score reasons remain readable.
+- **2-player:** keep ghost support enabled while each side learns the loop. Confirm one real player plus a ghost partner can still return balls and see `FIBER SAG`, `TENSION OK`, and `HARE READY!`.
+- **4-player:** set `AllowGhostPartners = false` and `MinPlayersToAutoStart = 4`. Confirm two real players per side create the fiber, ghosts are not needed, and PIN/HARE feedback remains readable.
+
 For a real 4-player test:
 
 ```lua
 AllowGhostPartners = false
 MinPlayersToAutoStart = 4
 ```
+
+## v0.6 RC checklist
+
+Use [docs/playtests/v06-rc-checklist.md](docs/playtests/v06-rc-checklist.md) before treating v0.6 as a release candidate.
 
 ## Tuning knobs
 

@@ -75,6 +75,30 @@ assertIncludes(
   "live net guidance should have a throttled broadcast interval"
 );
 
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "First30OnboardingSteps",
+  "first 30 seconds should use config-driven onboarding copy"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "Make a Tension Fiber net",
+  "onboarding should directly teach the partner-net concept"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "PlaytestProfiles",
+  "solo, 2-player, and 4-player playtest profiles should be explicit"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "MobileMessageYLandscape",
+  "mobile HUD vertical positions should be config-driven for RC polish"
+);
+
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
   /GoodDistanceMax\s*=\s*18/,
@@ -196,9 +220,45 @@ assertIncludes(
 );
 
 assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.First30OnboardingSteps",
+  "HUD should render first-30s onboarding from config"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.MobileMessageYLandscape",
+  "HUD should use config-driven mobile message placement"
+);
+
+assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDCameraClient.client.lua",
   "HareCameraKick",
   "camera feedback should use config-driven HARE kick"
+);
+
+assertIncludes(
+  "README.md",
+  "Solo / 2-player / 4-player RC checks",
+  "README should explain the expected player-count checks"
+);
+
+assertIncludes(
+  "README.md",
+  "v0.6 RC checklist",
+  "README should point to the v0.6 RC checklist"
+);
+
+assertIncludes(
+  "docs/playtests/v06-rc-checklist.md",
+  "First 30 seconds",
+  "RC checklist should include first 30 seconds playtest"
+);
+
+assertIncludes(
+  "docs/playtests/v06-rc-checklist.md",
+  "Mobile landscape",
+  "RC checklist should include mobile landscape sanity"
 );
 
 console.log("v0.6 guided party source checks passed");

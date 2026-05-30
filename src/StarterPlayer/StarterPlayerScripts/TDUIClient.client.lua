@@ -129,16 +129,16 @@ local function applyResponsiveLayout()
 	if isTouch then
 		scoreLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileScoreYPortrait or 0.095) or (Config.MobileScoreYLandscape or 0.105))
 		scoreLabel.TextSize = portrait and 27 or 32
-		messageLabel.Position = UDim2.fromScale(0.5, portrait and 0.205 or 0.225)
+		messageLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileMessageYPortrait or 0.205) or (Config.MobileMessageYLandscape or 0.215))
 		messageLabel.TextSize = portrait and 37 or 44
-		subMessageLabel.Position = UDim2.fromScale(0.5, portrait and 0.300 or 0.330)
+		subMessageLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileSubMessageYPortrait or 0.300) or (Config.MobileSubMessageYLandscape or 0.315))
 		subMessageLabel.TextSize = portrait and 18 or 21
 		hintLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileHintYPortrait or 0.865) or (Config.MobileHintYLandscape or 0.895))
 		hintLabel.Size = UDim2.fromScale(portrait and 0.82 or 0.66, portrait and 0.07 or 0.06)
 		hintLabel.TextSize = portrait and 16 or 18
 		hintLabel.Text = deviceHintText(portrait)
 		netGuideLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileNetGuideYPortrait or 0.815) or (Config.MobileNetGuideYLandscape or 0.805))
-		netGuideLabel.Size = UDim2.fromScale(portrait and 0.68 or 0.56, portrait and 0.060 or 0.064)
+		netGuideLabel.Size = UDim2.fromScale(portrait and (Config.MobileNetGuideWidthPortrait or 0.72) or (Config.MobileNetGuideWidthLandscape or 0.60), portrait and 0.060 or 0.064)
 		netGuideLabel.TextSize = portrait and 18 or 20
 		rotateHint.Visible = Config.ShowRotateHint ~= false and portrait
 	else
@@ -264,10 +264,10 @@ local function showOnboardingOnce()
 	tutorialPanel.Visible = true
 	tweenTutorial(0.14)
 
-	local steps = {
-		"1. Move with your partner.",
-		"2. Stretch the net.",
-		"3. Hold PIN together for HARE!",
+	local steps = Config.First30OnboardingSteps or {
+		"Make a Tension Fiber net with your partner.",
+		"Move apart until it says TENSION OK.",
+		"Hold PIN together to spark HARE!",
 	}
 
 	task.spawn(function()
@@ -424,13 +424,13 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 		subMessageLabel.Text = ""
 	elseif state == "Serving" then
 		setMessage(message, 0)
-		subMessageLabel.Text = "Get ready!"
+		subMessageLabel.Text = Config.ServingSubMessage or "Track the ball!"
 	elseif state == "Rally" then
 		messageLabel.Text = ""
-		subMessageLabel.Text = ""
+		subMessageLabel.Text = Config.RallySubMessage or ""
 	elseif state == "PointScored" then
 		setMessage(message, 4)
-		subMessageLabel.Text = "NEXT SERVE!"
+		subMessageLabel.Text = Config.PointSubMessage or "NEXT SERVE!"
 	elseif state == "GameOver" then
 		setMessage(message ~= "" and message or "GAME SET!", 4)
 		subMessageLabel.Text = "PLAY AGAIN!"

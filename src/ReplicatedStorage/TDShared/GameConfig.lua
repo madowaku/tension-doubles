@@ -134,6 +134,14 @@ local Config = {
 	-- v0.5 Onboarding & Feel Patch.
 	OnboardingEnabled = true,
 	OnboardingStepDuration = 1.35,
+	First30OnboardingSteps = {
+		"Make a Tension Fiber net with your partner.",
+		"Move apart until it says TENSION OK.",
+		"Hold PIN together to spark HARE!",
+	},
+	ServingSubMessage = "Track the ball!",
+	RallySubMessage = "",
+	PointSubMessage = "NEXT SERVE!",
 	TouchHint = "Hold PIN together!",
 	TouchLandscapeHint = "Hold PIN. Sync for HARE!",
 	TouchPortraitHint = "Rotate sideways for best play.",
@@ -163,8 +171,14 @@ local Config = {
 	MobileHintFadeDelay = 7.0,
 	MobileScoreYLandscape = 0.105,
 	MobileScoreYPortrait = 0.095,
+	MobileMessageYLandscape = 0.215,
+	MobileMessageYPortrait = 0.205,
+	MobileSubMessageYLandscape = 0.315,
+	MobileSubMessageYPortrait = 0.300,
 	MobileHintYLandscape = 0.895,
 	MobileHintYPortrait = 0.865,
+	MobileNetGuideWidthLandscape = 0.60,
+	MobileNetGuideWidthPortrait = 0.72,
 	MobilePinButtonScaleLandscape = 0.165,
 	MobilePinButtonScalePortrait = 0.205,
 	MobilePinButtonXLandscape = 0.885,
@@ -180,6 +194,11 @@ local Config = {
 	MobileCameraHeightPortrait = 106,
 	MobileCameraBackPortrait = 92,
 	MobileCameraFovPortrait = 72,
+	PlaytestProfiles = {
+		Solo = "AllowGhostPartners=true, MinPlayersToAutoStart=1",
+		TwoPlayer = "Ghost support allowed while each side learns the loop",
+		FourPlayer = "Set AllowGhostPartners=false and MinPlayersToAutoStart=4",
+	},
 }
 
 return Config
