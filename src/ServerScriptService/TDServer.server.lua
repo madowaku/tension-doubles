@@ -723,7 +723,7 @@ local function updateTeamBeam(teamName)
 
 	if tensionState == "Slack" then
 		width = Config.BeamWidthSlack or (Config.BeamWidth - 0.55)
-		transparency = 0.22
+		transparency = Config.BeamSlackTransparency or 0.32
 		curve = Config.BeamCurveSlack or 2.8
 	elseif tensionState == "OverTension" then
 		width = Config.BeamWidthOverTension or (Config.BeamWidth - 0.25)
@@ -732,7 +732,7 @@ local function updateTeamBeam(teamName)
 	elseif realPinCount >= 2 and tensionState ~= "Broken" then
 		color = BEAM_COLORS.Hare
 		width = Config.BeamWidth + (Config.BeamWidthHareBonus or 0.82)
-		transparency = 0.02
+		transparency = Config.BeamHareTransparency or 0
 		curve = Config.BeamCurveHare or 0
 	elseif realPinCount == 1 and tensionState ~= "Broken" then
 		color = Color3.fromRGB(255, 170, 90)
@@ -1074,12 +1074,12 @@ local function setBallVisualForFx(fxType)
 	local light = part:FindFirstChild("MobileReadableGlow")
 	if light and light:IsA("PointLight") then
 		light.Color = color
-		light.Brightness = fxType == "Hare" and 3.7 or 2.6
+		light.Brightness = fxType == "Hare" and (Config.HareGlowBrightness or 4.4) or 2.6
 	end
 	local trail = part:FindFirstChild("BallTrail")
 	if trail and trail:IsA("Trail") then
 		trail.Color = ColorSequence.new(color)
-		trail.Lifetime = fxType == "Hare" and 0.48 or 0.38
+		trail.Lifetime = fxType == "Hare" and (Config.HareTrailLifetime or 0.56) or 0.38
 	end
 end
 
@@ -1227,9 +1227,14 @@ local function processNetHit(teamName)
 	rallyHitCount += 1
 	setBallVisualForFx(fxType)
 
+	if fxType == "Slack" then
+		spawnShockwave(closest, BEAM_COLORS.Slack, Config.SlackAbsorbRippleSize or 9, Config.SlackAbsorbRippleDuration or 0.34, "TD_SlackAbsorbRipple")
+	end
+
 	if fxType == "Hare" then
 		ball.pausedUntil = now + Config.HareFreezeTime
 		spawnShockwave(closest, BEAM_COLORS.Hare, Config.HareShockwaveSize, Config.HareShockwaveDuration, "TD_HareShockwave")
+		spawnShockwave(closest, Color3.fromRGB(255, 246, 160), Config.HareHardeningRingSize or 16, Config.HareHardeningRingDuration or 0.30, "TD_HareHardeningRing")
 		pulseArena(teamName)
 	end
 

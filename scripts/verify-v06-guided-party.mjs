@@ -59,6 +59,18 @@ assertIncludes(
 
 assertIncludes(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "SlackAbsorbRippleSize",
+  "Slack hits should create a visible absorbed-impact ripple"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "HareHardeningRingSize",
+  "HARE should add a distinct fiber-hardening ring"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
   "NetGuidanceBroadcastInterval",
   "live net guidance should have a throttled broadcast interval"
 );
@@ -133,6 +145,18 @@ assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
   "Config.OverTensionWobbleScale",
   "server should tune Over Tension instability from config"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "TD_SlackAbsorbRipple",
+  "server should spawn a named Slack absorb ripple"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "TD_HareHardeningRing",
+  "server should spawn a named HARE hardening ring"
 );
 
 assertIncludes(
