@@ -183,6 +183,9 @@ tasks:
         - cmd: "mcp__Roblox_Studio.list_roblox_studios"
           status: blocked
           note: "Returned zero connected Studio instances."
+        - cmd: "mcp__Roblox_Studio.list_roblox_studios"
+          status: blocked
+          note: "2026-05-31 continuation check also returned zero connected Studio instances."
       next_unblock_step: "Reconnect Roblox Studio MCP, then resume T003 to observe Slack state before tuning."
   - id: T999
     type: judge
@@ -213,3 +216,4 @@ checks:
     task: T003
     commands:
       - "mcp__Roblox_Studio.list_roblox_studios returned no active Studio instances"
+      - "2026-05-31 continuation check: mcp__Roblox_Studio.list_roblox_studios returned no active Studio instances"
