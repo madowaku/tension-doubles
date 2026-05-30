@@ -8,7 +8,7 @@ goal:
   slug: "slack-mobile-visual-tuning"
   kind: specific
   tranche: "Observe current Slack/HARE visual behavior, choose the first safe mobile-readability tuning slice, implement it if needed, verify it, and audit the result."
-  status: blocked
+  status: done
 
 rules:
   pm_owns_state: true
@@ -161,7 +161,7 @@ tasks:
   - id: T003
     type: worker
     assignee: Worker
-    status: blocked
+    status: done
     reasoning_hint: default
     objective: "With an active Roblox Studio MCP/Play session, observe actual Slack sag and absorb ripple on a mobile/small viewport; if readability is weak, tune only Slack/HARE numeric visual config in GameConfig.lua, preserving ball visibility and HUD clarity."
     allowed_files:
@@ -177,20 +177,31 @@ tasks:
       - "Verification fails twice for the same reason."
       - "Studio runtime cannot be controlled enough to validate the selected change."
     receipt:
-      result: blocked
-      summary: "Worker cannot start because Roblox Studio MCP has no active Studio instance. Judge explicitly rejected source-only numeric tuning before actual Slack runtime observation."
+      result: done
+      changed_files:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
       commands:
-        - cmd: "mcp__Roblox_Studio.list_roblox_studios"
-          status: blocked
-          note: "Returned zero connected Studio instances."
-        - cmd: "mcp__Roblox_Studio.list_roblox_studios"
-          status: blocked
-          note: "2026-05-31 continuation check also returned zero connected Studio instances."
-      next_unblock_step: "Reconnect Roblox Studio MCP, then resume T003 to observe Slack state before tuning."
+        - cmd: "Studio Play via MCP with temporary SlackDistance=20"
+          status: pass
+          note: "Observed FIBER SAG guidance, SLACK! callout, beam curve 4.6/width 1.25 before tuning, TD_SlackAbsorbRipple max size 9."
+        - cmd: "Studio Play via MCP after tuning with temporary SlackDistance=20"
+          status: pass
+          note: "Observed FIBER SAG guidance, SLACK! callout, beam curve 5.4/width 1.45, TD_SlackAbsorbRipple max size 12."
+        - cmd: "mcp__Roblox_Studio.get_console_output"
+          status: pass
+          note: "No game Lua errors; only known Roblox Assistant CornerRadius warnings."
+        - cmd: "node scripts/verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+        - cmd: "mobile Slack config threshold check"
+          status: pass
+          note: "BeamCurveSlack >= 5.2, BeamWidthSlack >= 1.4, BeamSlackTransparency <= 0.26, SlackAbsorbRippleSize >= 11, SlackAbsorbRippleDuration >= 0.42."
+      summary: "Tuned Slack visual config for mobile readability: stronger sag, thicker/less transparent Slack beam, larger and longer absorb ripple. Restored Studio-only SlackDistance test override after observation."
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Audit whether the current tranche satisfies Slack/mobile visual readability."
     inputs:
@@ -207,13 +218,33 @@ tasks:
       - "missing evidence"
       - "mapping to Slack/mobile readability"
       - "next task if not complete"
-    receipt: null
+    receipt:
+      result: done
+      decision: complete
+      evidence:
+        - "T001 mapped existing Slack/HARE config and identified mobile readability risks."
+        - "T002 required Studio MCP observation before any numeric tuning."
+        - "T003 changed only src/ReplicatedStorage/TDShared/GameConfig.lua."
+        - "T003 raised BeamCurveSlack 4.6->5.4, BeamWidthSlack 1.25->1.45, lowered BeamSlackTransparency 0.32->0.24, raised SlackAbsorbRippleSize 9->12, and SlackAbsorbRippleDuration 0.34->0.44."
+        - "T003 recorded Studio Play via MCP before and after tuning, with temporary SlackDistance=20 restored afterward."
+        - "T003 recorded no game Lua errors, source verifier pass, Rojo build pass, and config threshold pass."
+      mapping_to_goal:
+        - "Slack sag readability improved with stronger curve and wider/less transparent Slack beam, observed before/after in Studio."
+        - "Blue absorb ripple readability improved with larger and longer ripple, observed before/after in Studio."
+        - "Mobile-first minimal slice stayed config-only in GameConfig.lua; no HUD/server/gameplay changes."
+        - "No heavy particles/assets were added, and Studio log showed no game Lua errors."
+      missing_evidence: []
+      residual_risk:
+        - "No physical-device mobile QA or screenshot artifact is recorded; acceptance rests on Studio MCP observation and config thresholds."
+        - "Slack was forced for observation with temporary SlackDistance=20, so natural two-player Slack frequency/readability remains indirectly covered."
+      next_allowed_task: null
 
 checks:
   dirty_fingerprint: unknown
   last_verification:
-    result: blocked
+    result: pass
     task: T003
     commands:
-      - "mcp__Roblox_Studio.list_roblox_studios returned no active Studio instances"
-      - "2026-05-31 continuation check: mcp__Roblox_Studio.list_roblox_studios returned no active Studio instances"
+      - "node scripts/verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+      - "Studio Play via MCP observed Slack before/after tuning"
