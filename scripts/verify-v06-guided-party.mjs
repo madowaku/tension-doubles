@@ -117,6 +117,24 @@ assertRegex(
   "mobile landscape PIN button should leave more playfield visible"
 );
 
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "HidePinButtonHintLandscape",
+  "landscape PIN button should not overlap with its Hold helper"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /ReturnLiftHare\s*=\s*0\.30/,
+  "HARE should behave more like a fast smash than a long lob"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /HareMaxForwardSpeed\s*=\s*40/,
+  "HARE forward travel should be capped to reduce OUT results"
+);
+
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
   /LandingTargetSize\s*=\s*7\.2/,
@@ -337,6 +355,12 @@ assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
   "Config.FailSubtitleDropText",
   "failure subtitles should be config-driven"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua",
+  "HidePinButtonHintLandscape",
+  "mobile landscape should hide the helper label that overlaps the PIN button"
 );
 
 assertIncludes(

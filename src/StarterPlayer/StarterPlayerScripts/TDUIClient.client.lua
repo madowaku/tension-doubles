@@ -177,8 +177,8 @@ end
 if isTouch and (Config.MobileHintFadeDelay or 0) > 0 then
 	task.delay(Config.MobileHintFadeDelay, function()
 		TweenService:Create(hintLabel, TweenInfo.new(0.45, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-			TextTransparency = 0.32,
-			TextStrokeTransparency = 0.55,
+			TextTransparency = 0.62,
+			TextStrokeTransparency = 0.78,
 		}):Play()
 	end)
 end
