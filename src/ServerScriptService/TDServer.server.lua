@@ -363,8 +363,32 @@ local function ensureGhostPartners()
 	end
 end
 
+local function ensureBallReadabilityHalo(part)
+	local halo = workspace:FindFirstChild("TD_BallReadabilityHalo")
+	if not (halo and halo:IsA("BasePart")) then
+		halo = Instance.new("Part")
+		halo.Name = "TD_BallReadabilityHalo"
+		halo.Parent = workspace
+	end
+
+	halo.Shape = Enum.PartType.Ball
+	halo.Anchored = true
+	halo.CanCollide = false
+	halo.CanQuery = false
+	halo.CanTouch = false
+	halo.CastShadow = false
+	local haloSize = Config.BallReadabilityHaloSize or 4.4
+	halo.Size = Vector3.new(haloSize, haloSize, haloSize)
+	halo.Material = Enum.Material.Neon
+	halo.Color = Color3.fromRGB(255, 242, 150)
+	halo.Transparency = Config.BallReadabilityHaloTransparency or 0.62
+	halo.CFrame = part.CFrame
+	return halo
+end
+
 local function ensureBallPart()
 	if ball.part and ball.part.Parent then
+		ensureBallReadabilityHalo(ball.part)
 		return ball.part
 	end
 
@@ -379,8 +403,8 @@ local function ensureBallPart()
 
 	local light = Instance.new("PointLight")
 	light.Name = "MobileReadableGlow"
-	light.Brightness = 2.6
-	light.Range = 18
+	light.Brightness = Config.BallReadableGlowBrightness or 3.4
+	light.Range = Config.BallReadableGlowRange or 22
 	light.Color = Color3.fromRGB(255, 240, 160)
 	light.Parent = part
 
@@ -398,7 +422,7 @@ local function ensureBallPart()
 	trail.Name = "BallTrail"
 	trail.Attachment0 = a0
 	trail.Attachment1 = a1
-	trail.Lifetime = 0.38
+	trail.Lifetime = Config.BallTrailLifetime or 0.50
 	trail.MinLength = 0.2
 	trail.LightEmission = 0.95
 	trail.Transparency = NumberSequence.new({
@@ -410,7 +434,29 @@ local function ensureBallPart()
 
 	part.Parent = workspace
 	ball.part = part
+	ensureBallReadabilityHalo(part)
 	return part
+end
+
+local function setBallVisualCFrame(cframe)
+	if ball.part then
+		ball.part.CFrame = cframe
+	end
+	local halo = workspace:FindFirstChild("TD_BallReadabilityHalo")
+	if halo and halo:IsA("BasePart") then
+		halo.CFrame = cframe
+	end
+end
+
+local function setBallVisualHidden(hidden)
+	local transparency = hidden and 1 or 0
+	if ball.part then
+		ball.part.Transparency = transparency
+	end
+	local halo = workspace:FindFirstChild("TD_BallReadabilityHalo")
+	if halo and halo:IsA("BasePart") then
+		halo.Transparency = hidden and 1 or (Config.BallReadabilityHaloTransparency or 0.62)
+	end
 end
 
 local function ensureLandingTargetMarker()
@@ -997,16 +1043,14 @@ local function serveBall(servingTeam)
 		trail.Color = ColorSequence.new(Color3.fromRGB(255, 245, 180))
 	end
 	part.Color = Color3.fromRGB(255, 245, 180)
-	part.Transparency = 0
-	part.CFrame = CFrame.new(ball.position)
+	setBallVisualHidden(false)
+	setBallVisualCFrame(CFrame.new(ball.position))
 end
 
 local function hideBall()
 	ball.active = false
-	if ball.part then
-		ball.part.Transparency = 1
-		ball.part.CFrame = CFrame.new(0, -100, 0)
-	end
+	setBallVisualHidden(true)
+	setBallVisualCFrame(CFrame.new(0, -100, 0))
 	hideLandingTargetMarker()
 end
 
@@ -1197,13 +1241,32 @@ local function setBallVisualForFx(fxType)
 	local light = part:FindFirstChild("MobileReadableGlow")
 	if light and light:IsA("PointLight") then
 		light.Color = color
-		light.Brightness = fxType == "Hare" and (Config.HareGlowBrightness or 4.4) or 2.6
+		light.Brightness = fxType == "Hare" and (Config.HareGlowBrightness or 4.4) or (Config.BallReadableGlowBrightness or 3.4)
+		light.Range = Config.BallReadableGlowRange or 22
 	end
 	local trail = part:FindFirstChild("BallTrail")
 	if trail and trail:IsA("Trail") then
 		trail.Color = ColorSequence.new(color)
-		trail.Lifetime = fxType == "Hare" and (Config.HareTrailLifetime or 0.56) or 0.38
+		trail.Lifetime = fxType == "Hare" and (Config.HareTrailLifetime or 0.56) or (Config.BallTrailLifetime or 0.50)
 	end
+	local halo = workspace:FindFirstChild("TD_BallReadabilityHalo")
+	if halo and halo:IsA("BasePart") then
+		halo.Color = color:Lerp(Color3.fromRGB(255, 255, 255), 0.18)
+		halo.Transparency = Config.BallReadabilityHaloTransparency or 0.62
+	end
+end
+
+local function shouldApplyEarlyRallyAssist(fxType)
+	return fxType ~= "Hare" and rallyHitCount < (Config.EarlyRallyAssistHits or 0)
+end
+
+local function applyEarlyRallyAssist(fxType, lift, power)
+	if not shouldApplyEarlyRallyAssist(fxType) then
+		return lift, power
+	end
+	local assistedLift = math.max(lift, Config.EarlyRallyAssistLiftFloor or lift)
+	local assistedPower = math.max(Config.BallMinSpeed, power - (Config.EarlyRallyAssistPowerTrim or 0))
+	return assistedLift, assistedPower
 end
 
 local function processNetHit(teamName)
@@ -1319,6 +1382,7 @@ local function processNetHit(teamName)
 		hareCombo[teamName] = 0
 	end
 
+	lift, power = applyEarlyRallyAssist(fxType, lift, power)
 	local finalDir = MathUtil.safeUnit(horizontal + Vector3.new(0, lift, 0), returnDir)
 	local finalVelocity = finalDir * power
 
@@ -1336,6 +1400,9 @@ local function processNetHit(teamName)
 			forwardCap = Config.OverTensionMaxForwardSpeed or forwardCap
 		elseif fxType == "Slack" then
 			forwardCap = Config.SlackMaxForwardSpeed or forwardCap
+		end
+		if shouldApplyEarlyRallyAssist(fxType) then
+			forwardCap = math.min(forwardCap, Config.EarlyRallyAssistForwardCap or forwardCap)
 		end
 
 		if math.abs(finalVelocity.Z) > forwardCap then
@@ -1363,7 +1430,7 @@ local function processNetHit(teamName)
 	end
 
 	if ball.part then
-		ball.part.CFrame = CFrame.new(ball.position)
+		setBallVisualCFrame(CFrame.new(ball.position))
 	end
 
 	fireHitFx(fxType, closest, teamName)
@@ -1376,9 +1443,7 @@ local function updateBall(dt)
 	end
 
 	if os.clock() < (ball.pausedUntil or 0) then
-		if ball.part then
-			ball.part.CFrame = CFrame.new(ball.position)
-		end
+		setBallVisualCFrame(CFrame.new(ball.position))
 		return
 	end
 
@@ -1393,9 +1458,7 @@ local function updateBall(dt)
 	processNetHit("Red")
 	processNetHit("Blue")
 
-	if ball.part then
-		ball.part.CFrame = CFrame.new(ball.position)
-	end
+	setBallVisualCFrame(CFrame.new(ball.position))
 
 	processGroundOrOut()
 end

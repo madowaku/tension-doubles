@@ -70,7 +70,7 @@ local Config = {
 	ReturnLiftNormal = 0.52,
 	ReturnLiftOnePin = 0.56,
 	ReturnLiftOverTension = 0.20,
-	ReturnLiftHare = 0.30,
+	ReturnLiftHare = 0.24,
 	ForwardSpeedCapEnabled = true,
 	ReturnMaxForwardSpeed = 38,
 	PinMaxForwardSpeed = 42,
@@ -78,6 +78,10 @@ local Config = {
 	OnePinMaxForwardSpeed = 43,
 	OverTensionMaxForwardSpeed = 40,
 	SlackMaxForwardSpeed = 28,
+	EarlyRallyAssistHits = 2,
+	EarlyRallyAssistForwardCap = 34,
+	EarlyRallyAssistLiftFloor = 0.46,
+	EarlyRallyAssistPowerTrim = 2,
 
 	-- Match pacing.
 	PointDelay = 1.45,
@@ -106,6 +110,11 @@ local Config = {
 	HareSparkColumnHeight = 18,
 	HareSparkColumnWidth = 1.4,
 	HareSparkColumnDuration = 0.34,
+	BallReadabilityHaloSize = 4.4,
+	BallReadabilityHaloTransparency = 0.62,
+	BallReadableGlowBrightness = 3.4,
+	BallReadableGlowRange = 22,
+	BallTrailLifetime = 0.50,
 	HudMessageDuration = 1.25,
 	MobilePinButtonScale = 0.20,
 

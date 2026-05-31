@@ -125,14 +125,26 @@ assertIncludes(
 
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
-  /ReturnLiftHare\s*=\s*0\.30/,
-  "HARE should behave more like a fast smash than a long lob"
+  /ReturnLiftHare\s*=\s*0\.24/,
+  "HARE should stay low like a smash after mobile video review"
 );
 
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
   /HareMaxForwardSpeed\s*=\s*40/,
   "HARE forward travel should be capped to reduce OUT results"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "EarlyRallyAssistHits",
+  "early rallies should have a small assist to reduce instant DROP chains"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "BallReadabilityHaloSize",
+  "mobile ball readability should use a visual halo instead of only enlarging the ball"
 );
 
 assertRegex(
@@ -283,6 +295,18 @@ assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
   "TD_HareSparkColumn",
   "HARE should spawn a named vertical spark effect"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "applyEarlyRallyAssist",
+  "server should apply early-rally assist before return velocity is assigned"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "TD_BallReadabilityHalo",
+  "server should add a named visual halo to the ball"
 );
 
 assertRegex(
