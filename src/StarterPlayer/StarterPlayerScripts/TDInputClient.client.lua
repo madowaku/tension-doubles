@@ -71,7 +71,7 @@ local function updateButtonVisual()
 	end
 
 	local portrait = isPortrait()
-	local showHelper = portrait or not (Config.HidePinButtonHintLandscape == true)
+	local showHelper = Config.ShowPinButtonHelper == true and (portrait or not (Config.HidePinButtonHintLandscape == true))
 	if isPinning then
 		pinButton.Text = "PIN!"
 		if helperLabel then
@@ -147,7 +147,7 @@ local function applyMobileButtonLayout()
 		buttonGlow.Size = UDim2.fromScale(baseButtonScale + 0.045, baseButtonScale + 0.045)
 	end
 	if helperLabel then
-		helperLabel.Visible = portrait or not (Config.HidePinButtonHintLandscape == true)
+		helperLabel.Visible = Config.ShowPinButtonHelper == true and (portrait or not (Config.HidePinButtonHintLandscape == true))
 		helperLabel.Position = UDim2.fromScale(x, math.min(0.94, y + (portrait and 0.145 or 0.155)))
 		helperLabel.Size = UDim2.fromScale(portrait and 0.30 or 0.16, portrait and 0.050 or 0.044)
 	end

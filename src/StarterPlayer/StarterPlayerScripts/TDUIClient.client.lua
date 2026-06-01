@@ -449,6 +449,14 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 		else
 			subMessageLabel.Text = ""
 		end
+	elseif state == "Ready" then
+		showOnboardingOnce()
+		setMessage(message ~= "" and message or (Config.MatchReadyMessage or "GET READY"), 4)
+		if Config.CpuFillEnabled and cpuFillCount(data) > 0 then
+			subMessageLabel.Text = Config.CpuFillIntroText or Config.MatchReadySubMessage or ""
+		else
+			subMessageLabel.Text = Config.MatchReadySubMessage or ""
+		end
 	elseif state == "Serving" then
 		setMessage(message, 0)
 		subMessageLabel.Text = Config.ServingSubMessage or "Track the ball!"

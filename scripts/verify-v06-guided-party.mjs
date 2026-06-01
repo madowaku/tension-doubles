@@ -159,6 +159,24 @@ assertIncludes(
   "landscape PIN button should not overlap with its Hold helper"
 );
 
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "ShowPinButtonHelper = false",
+  "mobile PIN helper text should be disabled to prevent PIN/Hold overlap"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "PreMatchReadyTime",
+  "CPU-filled matches should give players a short moment before countdown"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "MatchReadyMessage",
+  "pre-match ready state should have clear copy"
+);
+
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
   /ReturnLiftHare\s*=\s*0\.24/,
@@ -383,6 +401,12 @@ assertIncludes(
 
 assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
+  "runReadyUp",
+  "server should pause briefly before the countdown starts"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
   "cpuPlayers",
   "match-state payload should expose CPU fill counts"
 );
@@ -455,6 +479,12 @@ assertIncludes(
 
 assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  'state == "Ready"',
+  "HUD should render the pre-match ready state"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
   "subMessageHoldUntil",
   "temporary HARE subtitles should survive frequent rally guidance broadcasts"
 );
@@ -481,6 +511,12 @@ assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua",
   "HidePinButtonHintLandscape",
   "mobile landscape should hide the helper label that overlaps the PIN button"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua",
+  "Config.ShowPinButtonHelper == true",
+  "mobile PIN helper should only render when explicitly enabled"
 );
 
 assertIncludes(

@@ -1801,6 +1801,15 @@ local function canStartMatch()
 	return count >= 4
 end
 
+local function runReadyUp()
+	local readyTime = Config.PreMatchReadyTime or 0
+	if readyTime <= 0 then
+		return
+	end
+	setState("Ready", Config.MatchReadyMessage or "GET READY")
+	task.wait(readyTime)
+end
+
 local function runCountdown()
 	setState("Countdown", "3")
 	for i = Config.CountdownTime, 1, -1 do
@@ -1844,6 +1853,7 @@ local function startMatchIfPossible()
 			lastPointLoser = "Blue"
 			winningTeam = nil
 			resetPlayersToSpawns()
+			runReadyUp()
 			runCountdown()
 
 			while score.Red < Config.ScoreToWin and score.Blue < Config.ScoreToWin and canStartMatch() do

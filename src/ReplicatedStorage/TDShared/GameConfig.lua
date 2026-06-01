@@ -100,6 +100,7 @@ local Config = {
 
 	-- Match pacing.
 	PointDelay = 1.45,
+	PreMatchReadyTime = 2.6,
 	CountdownTime = 3,
 	GameOverDelay = 3.5,
 
@@ -140,6 +141,8 @@ local Config = {
 	PinRingRadius = 4.2,
 	PinRingHeight = 0.12,
 	WaitingMessage = "Waiting for players...",
+	MatchReadyMessage = "GET READY",
+	MatchReadySubMessage = "Find your spot. Watch the first serve.",
 	StartMessage = "PINTO HARE!",
 	WaitingSubMessage = "Make a net. Hold PIN. Sync HARE.",
 	CpuFillMatchSubMessage = "CPU fills empty slots. Jump in anytime!",
@@ -232,6 +235,7 @@ local Config = {
 	MobilePinButtonYLandscape = 0.730,
 	MobilePinButtonXPortrait = 0.835,
 	MobilePinButtonYPortrait = 0.745,
+	ShowPinButtonHelper = false,
 	HidePinButtonHintLandscape = true,
 	GhostPartnerVisible = false,
 	GhostPartTransparency = 1,
