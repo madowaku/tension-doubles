@@ -113,6 +113,24 @@ assertIncludes(
 
 assertIncludes(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "CpuFillReactionDelay",
+  "CPU partners should have readable reaction delay instead of perfect tracking"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "CpuFillAimError",
+  "CPU partners should miss slightly so they do not feel perfect"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "CpuFillIntroText",
+  "first-time copy should explain CPU fill"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
   "MobileMessageYLandscape",
   "mobile HUD vertical positions should be config-driven for RC polish"
 );
@@ -335,8 +353,26 @@ assertIncludes(
 
 assertIncludes(
   "src/ServerScriptService/TDServer.server.lua",
+  "TD_CPU_Outline",
+  "CPU fill partners should have a polished readable outline"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
   "updateCpuFillPartners",
   "server should move CPU partners into missing team slots"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "CpuFillReactionDelay",
+  "server should apply CPU reaction delay"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "CpuFillAimError",
+  "server should apply slight CPU positioning error"
 );
 
 assertIncludes(
@@ -409,6 +445,12 @@ assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
   "Config.CpuFillMatchSubMessage",
   "HUD should use CPU fill match copy from config"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.CpuFillIntroText",
+  "countdown HUD should explain CPU fill before the first serve"
 );
 
 assertIncludes(

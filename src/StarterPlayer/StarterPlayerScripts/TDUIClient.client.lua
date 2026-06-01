@@ -444,7 +444,11 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 	elseif state == "Countdown" then
 		showOnboardingOnce()
 		setMessage(message ~= "" and message or "3", 20)
-		subMessageLabel.Text = ""
+		if Config.CpuFillEnabled and cpuFillCount(data) > 0 then
+			subMessageLabel.Text = Config.CpuFillIntroText or Config.CpuFillMatchSubMessage or ""
+		else
+			subMessageLabel.Text = ""
+		end
 	elseif state == "Serving" then
 		setMessage(message, 0)
 		subMessageLabel.Text = Config.ServingSubMessage or "Track the ball!"

@@ -33,9 +33,13 @@ local Config = {
 	CpuFillNetSpan = 14,
 	CpuFillCourtZ = 18,
 	CpuFillBallTrackZOffset = 5,
+	CpuFillReactionDelay = 0.22,
+	CpuFillAimError = 2.8,
 	CpuFillReactionDistance = 18,
-	CpuFillAutoPinChance = 0.72,
+	CpuFillAutoPinChance = 0.58,
 	CpuFillAutoPinLeadTime = 1.25,
+	CpuFillPinDecisionInterval = 0.34,
+	CpuFillPinCooldown = 0.72,
 
 	-- Ball. v0.5.2 lowers PIN/HARE arcs so strong returns land in court more often.
 	BallRadius = 1.72,
@@ -173,9 +177,11 @@ local Config = {
 	OnboardingStepDuration = 1.35,
 	First30OnboardingSteps = {
 		"Make a Tension Fiber net with your partner.",
+		"CPU fills empty slots until players join.",
 		"Move apart until it says TENSION OK.",
 		"Hold PIN together to spark HARE!",
 	},
+	CpuFillIntroText = "CPU partners are filling empty slots.",
 	ServingSubMessage = "Track the ball!",
 	RallySubMessage = "",
 	PointSubMessage = "NEXT SERVE!",

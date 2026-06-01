@@ -371,6 +371,60 @@ local function ensureCpuLabel(part)
 	return labelGui
 end
 
+local function ensureCpuPolish(part, teamName)
+	local outline = part:FindFirstChild("TD_CPU_Outline")
+	if not outline then
+		outline = Instance.new("SelectionBox")
+		outline.Name = "TD_CPU_Outline"
+		outline.LineThickness = 0.06
+		outline.SurfaceTransparency = 0.72
+		outline.Adornee = part
+		outline.Parent = part
+	end
+	outline.Color3 = TEAM_COLORS[teamName]:Lerp(Color3.fromRGB(255, 255, 255), 0.25)
+
+	local light = part:FindFirstChild("TD_CPU_Glow")
+	if not light then
+		light = Instance.new("PointLight")
+		light.Name = "TD_CPU_Glow"
+		light.Brightness = 0.75
+		light.Range = 9
+		light.Parent = part
+	end
+	light.Color = TEAM_COLORS[teamName]
+
+	local a0 = part:FindFirstChild("TD_CPU_TrailA")
+	if not a0 then
+		a0 = Instance.new("Attachment")
+		a0.Name = "TD_CPU_TrailA"
+		a0.Position = Vector3.new(0, 0.9, 0)
+		a0.Parent = part
+	end
+	local a1 = part:FindFirstChild("TD_CPU_TrailB")
+	if not a1 then
+		a1 = Instance.new("Attachment")
+		a1.Name = "TD_CPU_TrailB"
+		a1.Position = Vector3.new(0, -0.9, 0)
+		a1.Parent = part
+	end
+	local trail = part:FindFirstChild("TD_CPU_Trail")
+	if not trail then
+		trail = Instance.new("Trail")
+		trail.Name = "TD_CPU_Trail"
+		trail.Attachment0 = a0
+		trail.Attachment1 = a1
+		trail.Lifetime = 0.22
+		trail.LightEmission = 0.75
+		trail.MinLength = 0.1
+		trail.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.62),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		trail.Parent = part
+	end
+	trail.Color = ColorSequence.new(TEAM_COLORS[teamName]:Lerp(Color3.fromRGB(255, 240, 140), 0.18))
+end
+
 local function createGhostPart(teamName, index, position)
 	local part = Instance.new("Part")
 	part.Name = Config.CpuFillEnabled and (teamName .. "CPUPartner" .. tostring(index)) or (teamName .. "GhostPartner" .. tostring(index))
@@ -396,11 +450,15 @@ local function createGhostPart(teamName, index, position)
 	attachment.Name = "TDNetAttachment"
 	attachment.Parent = part
 	ensureCpuLabel(part).Enabled = Config.CpuFillEnabled == true
+	ensureCpuPolish(part, teamName)
 
 	cpuPartnerState[teamName][index] = cpuPartnerState[teamName][index] or {
 		IsPinning = false,
 		LastPinStartTime = -math.huge,
 		NextPinDecisionAt = 0,
+		NextTargetUpdateAt = 0,
+		TargetPosition = position,
+		NextPinAllowedAt = 0,
 	}
 	return part
 end
@@ -891,6 +949,18 @@ local function setCpuPartnerActive(part, active)
 	if label and label:IsA("BillboardGui") then
 		label.Enabled = active and Config.CpuFillEnabled == true
 	end
+	local outline = part:FindFirstChild("TD_CPU_Outline")
+	if outline and outline:IsA("SelectionBox") then
+		outline.Visible = active and Config.CpuFillEnabled == true
+	end
+	local glow = part:FindFirstChild("TD_CPU_Glow")
+	if glow and glow:IsA("PointLight") then
+		glow.Enabled = active and Config.CpuFillEnabled == true
+	end
+	local trail = part:FindFirstChild("TD_CPU_Trail")
+	if trail and trail:IsA("Trail") then
+		trail.Enabled = active and Config.CpuFillEnabled == true
+	end
 	if active then
 		if Config.CpuFillEnabled then
 			part.Transparency = (Config.CpuFillPartnerVisible == false) and 1 or 0.18
@@ -920,6 +990,33 @@ local function moveCpuPartner(part, target, dt)
 	end
 	local step = (Config.CpuFillMoveSpeed or 18) * math.max(dt, 1 / 60)
 	part.Position = part.Position + delta.Unit * math.min(step, distance)
+end
+
+local function cpuTargetWithError(target)
+	local errorAmount = Config.CpuFillAimError or 0
+	if errorAmount <= 0 then
+		return target
+	end
+	local xSteps = math.max(1, math.floor(errorAmount * 10))
+	local zSteps = math.max(1, math.floor(errorAmount * 6))
+	return Vector3.new(
+		math.clamp(target.X + math.random(-xSteps, xSteps) / 10, -halfWidth() + 3, halfWidth() - 3),
+		target.Y,
+		teamZClamp(target.Z >= 0 and "Red" or "Blue", target.Z + math.random(-zSteps, zSteps) / 10)
+	)
+end
+
+local function updateCpuTargetState(teamName, index, target)
+	local state = cpuPartnerState[teamName] and cpuPartnerState[teamName][index]
+	if not state then
+		return target
+	end
+	local now = os.clock()
+	if now >= (state.NextTargetUpdateAt or 0) then
+		state.NextTargetUpdateAt = now + (Config.CpuFillReactionDelay or 0.22)
+		state.TargetPosition = cpuTargetWithError(target)
+	end
+	return state.TargetPosition or target
 end
 
 local function updateCpuFillPartners(dt)
@@ -955,7 +1052,7 @@ local function updateCpuFillPartners(dt)
 				if ghosts[i] then
 					setCpuPartnerActive(ghosts[i], true)
 					if Config.CpuFillEnabled then
-						moveCpuPartner(ghosts[i], targets[i], dt)
+						moveCpuPartner(ghosts[i], updateCpuTargetState(teamName, i, targets[i]), dt)
 					else
 						ghosts[i].Position = targets[i]
 					end
@@ -972,7 +1069,7 @@ local function updateCpuFillPartners(dt)
 			if ghosts[1] then
 				setCpuPartnerActive(ghosts[1], true)
 				if Config.CpuFillEnabled then
-					moveCpuPartner(ghosts[1], target, dt)
+					moveCpuPartner(ghosts[1], updateCpuTargetState(teamName, 1, target), dt)
 				else
 					ghosts[1].Position = target
 				end
@@ -1663,13 +1760,19 @@ local function updateCpuPinning()
 			if partner and state and partner:GetAttribute("CpuFillActive") == true then
 				local nearBall = ball.active and ((partner.Position - ball.position).Magnitude <= (Config.CpuFillReactionDistance or 18))
 				if now >= (state.NextPinDecisionAt or 0) then
-					state.NextPinDecisionAt = now + 0.28
+					state.NextPinDecisionAt = now + (Config.CpuFillPinDecisionInterval or 0.34)
 					local shouldPin = (humanPinning or nearBall or ballThreatening) and (math.random() <= (Config.CpuFillAutoPinChance or 0.72))
 					if humanPinning then
 						shouldPin = true
 					end
+					if now < (state.NextPinAllowedAt or 0) then
+						shouldPin = false
+					end
 					if shouldPin and not state.IsPinning then
 						state.LastPinStartTime = humanPinStart or now
+					end
+					if not shouldPin and state.IsPinning then
+						state.NextPinAllowedAt = now + (Config.CpuFillPinCooldown or 0.72)
 					end
 					state.IsPinning = shouldPin
 				end
