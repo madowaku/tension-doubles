@@ -23,8 +23,8 @@ function assertRegex(file, regex, reason) {
 
 assertIncludes(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
-  'Version = "0.6.0"',
-  "v0.6 should be explicit in config"
+  'Version = "0.6.1"',
+  "v0.6.1 should be explicit in config"
 );
 
 assertIncludes(
@@ -91,6 +91,24 @@ assertIncludes(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
   "PlaytestProfiles",
   "solo, 2-player, and 4-player playtest profiles should be explicit"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "CpuFillEnabled",
+  "v0.6.1 should fill missing match slots with CPU partners"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "CpuFillLabelText",
+  "CPU partners should be visibly labeled"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "CpuFillMatchSubMessage",
+  "HUD copy should explain that CPU players are filling empty slots"
 );
 
 assertIncludes(
@@ -309,6 +327,30 @@ assertIncludes(
   "server should add a named visual halo to the ball"
 );
 
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "TD_CPU_Label",
+  "CPU fill partners should have visible world labels"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "updateCpuFillPartners",
+  "server should move CPU partners into missing team slots"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "updateCpuPinning",
+  "server should let CPU partners contribute light PIN timing"
+);
+
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "cpuPlayers",
+  "match-state payload should expose CPU fill counts"
+);
+
 assertRegex(
   "src/ServerScriptService/TDServer.server.lua",
   /awardPoint\([^\n]+,\s*(Config\.ScoreReasonDropText or )?"DROP!"/,
@@ -355,6 +397,18 @@ assertIncludes(
   "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
   "Config.HareSubtitleText",
   "HARE subtitle should come from config"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "cpuFillCount",
+  "HUD should be ready to show CPU fill copy when empty slots are filled"
+);
+
+assertIncludes(
+  "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua",
+  "Config.CpuFillMatchSubMessage",
+  "HUD should use CPU fill match copy from config"
 );
 
 assertIncludes(

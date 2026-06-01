@@ -1,9 +1,9 @@
 --!strict
--- Tension Doubles: PINTO HARE! / Roblox ver0.6.0
+-- Tension Doubles: PINTO HARE! / Roblox ver0.6.1
 -- Serve Balance Patch: serves now have their own tuned speed/arc so they reach the opponent court.
 
 local Config = {
-	Version = "0.6.0",
+	Version = "0.6.1",
 	Title = "Tension Doubles: PINTO HARE!",
 	Subtitle = "Hold PIN. Sync for HARE.",
 	MaterialName = "Tension Fiber",
@@ -25,6 +25,17 @@ local Config = {
 	GhostMirrorsPinning = true,
 	SoloGhostsMirrorPinning = true,
 	MinPlayersToAutoStart = 1, -- set to 4 for a stricter live game
+	CpuFillEnabled = true,
+	CpuFillPartnerVisible = true,
+	CpuFillLabelText = "CPU",
+	CpuFillPartSize = 2.2,
+	CpuFillMoveSpeed = 18,
+	CpuFillNetSpan = 14,
+	CpuFillCourtZ = 18,
+	CpuFillBallTrackZOffset = 5,
+	CpuFillReactionDistance = 18,
+	CpuFillAutoPinChance = 0.72,
+	CpuFillAutoPinLeadTime = 1.25,
 
 	-- Ball. v0.5.2 lowers PIN/HARE arcs so strong returns land in court more often.
 	BallRadius = 1.72,
@@ -127,6 +138,7 @@ local Config = {
 	WaitingMessage = "Waiting for players...",
 	StartMessage = "PINTO HARE!",
 	WaitingSubMessage = "Make a net. Hold PIN. Sync HARE.",
+	CpuFillMatchSubMessage = "CPU fills empty slots. Jump in anytime!",
 	GameOverSubMessage = "NEXT MATCH INCOMING!",
 	FailSubtitleDropText = "LANDING MISSED!",
 	FailSubtitleOutText = "TOO MUCH POWER!",

@@ -1,4 +1,4 @@
--- Tension Doubles: PINTO HARE! / Roblox ver0.5.3
+-- Tension Doubles: PINTO HARE! / Roblox ver0.6.1
 -- Server-authoritative MVP: court generation, teams, Beam nets, pin input state,
 -- scripted ball movement, virtual-net hit detection, scoring, match loop, and Onboarding & Feel FX.
 
@@ -60,6 +60,7 @@ local lastGuidanceBroadcast = 0
 local teamBeams = {}
 local pinIndicators = {}
 local ghostPartners = { Red = {}, Blue = {} }
+local cpuPartnerState = { Red = {}, Blue = {} }
 local landingTargetMarker = nil
 local lastLandingTargetUpdate = 0
 
@@ -71,6 +72,20 @@ local ball = {
 	active = false,
 	pausedUntil = 0,
 }
+
+local function countActiveCpuPartners(teamName)
+	local count = 0
+	local partners = ghostPartners[teamName]
+	if not partners then
+		return count
+	end
+	for _, partner in ipairs(partners) do
+		if partner and partner.Parent and partner:GetAttribute("CpuFillActive") == true then
+			count += 1
+		end
+	end
+	return count
+end
 
 local TEAM_COLORS = {
 	Red = Color3.fromRGB(255, 80, 80),
@@ -115,6 +130,10 @@ local function broadcastState(message)
 		redPlayers = teamCount("Red"),
 		bluePlayers = teamCount("Blue"),
 		playersNeeded = Config.AllowGhostPartners and Config.MinPlayersToAutoStart or 4,
+		cpuPlayers = {
+			Red = countActiveCpuPartners("Red"),
+			Blue = countActiveCpuPartners("Blue"),
+		},
 		title = Config.Title,
 		netGuidance = netGuidance,
 	})
@@ -327,26 +346,62 @@ local function ensureTeams()
 	end
 end
 
+local function ensureCpuLabel(part)
+	local labelGui = part:FindFirstChild("TD_CPU_Label")
+	if not labelGui then
+		labelGui = Instance.new("BillboardGui")
+		labelGui.Name = "TD_CPU_Label"
+		labelGui.AlwaysOnTop = true
+		labelGui.Size = UDim2.fromOffset(86, 28)
+		labelGui.StudsOffset = Vector3.new(0, 2.2, 0)
+		labelGui.Parent = part
+
+		local label = Instance.new("TextLabel")
+		label.Name = "Text"
+		label.BackgroundTransparency = 1
+		label.Size = UDim2.fromScale(1, 1)
+		label.Font = Enum.Font.GothamBlack
+		label.Text = Config.CpuFillLabelText or "CPU"
+		label.TextColor3 = Color3.fromRGB(255, 245, 170)
+		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		label.TextStrokeTransparency = 0.15
+		label.TextScaled = true
+		label.Parent = labelGui
+	end
+	return labelGui
+end
+
 local function createGhostPart(teamName, index, position)
 	local part = Instance.new("Part")
-	part.Name = teamName .. "GhostPartner" .. tostring(index)
+	part.Name = Config.CpuFillEnabled and (teamName .. "CPUPartner" .. tostring(index)) or (teamName .. "GhostPartner" .. tostring(index))
 	part.Shape = Enum.PartType.Ball
 	part.Anchored = true
 	part.CanCollide = false
 	part.CanQuery = false
 	part.CanTouch = false
-	local ghostSize = Config.GhostPartSize or 0.55
+	local ghostSize = Config.CpuFillEnabled and (Config.CpuFillPartSize or 2.2) or (Config.GhostPartSize or 0.55)
 	part.Size = Vector3.new(ghostSize, ghostSize, ghostSize)
 	part.Material = Enum.Material.Neon
-	part.Transparency = (Config.GhostPartnerVisible == true) and 0.55 or (Config.GhostPartTransparency or 1)
+	part.Transparency = Config.CpuFillEnabled and 0.18 or ((Config.GhostPartnerVisible == true) and 0.55 or (Config.GhostPartTransparency or 1))
 	part.CastShadow = false
 	part.Color = TEAM_COLORS[teamName]
 	part.Position = position
+	part:SetAttribute("CpuFillTeam", teamName)
+	part:SetAttribute("CpuFillSlot", index)
+	part:SetAttribute("CpuFillActive", Config.CpuFillEnabled == true)
+	part:SetAttribute("CpuPinning", false)
 	part.Parent = VisualsFolder
 
 	local attachment = Instance.new("Attachment")
 	attachment.Name = "TDNetAttachment"
 	attachment.Parent = part
+	ensureCpuLabel(part).Enabled = Config.CpuFillEnabled == true
+
+	cpuPartnerState[teamName][index] = cpuPartnerState[teamName][index] or {
+		IsPinning = false,
+		LastPinStartTime = -math.huge,
+		NextPinDecisionAt = 0,
+	}
 	return part
 end
 
@@ -607,6 +662,34 @@ local function countRealPinning(teamName)
 	return count
 end
 
+local function countCpuPinning(teamName)
+	local count = 0
+	local states = cpuPartnerState[teamName]
+	if not states then
+		return count
+	end
+	for i = 1, 2 do
+		local partner = ghostPartners[teamName] and ghostPartners[teamName][i]
+		local state = states[i]
+		if partner and partner:GetAttribute("CpuFillActive") == true and state and state.IsPinning then
+			count += 1
+		end
+	end
+	return count
+end
+
+local function getHumanPinStart(teamName)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Team and player.Team.Name == teamName then
+			local state = playerState[player]
+			if state and state.IsPinning and getAliveRoot(player) then
+				return state.LastPinStartTime
+			end
+		end
+	end
+	return nil
+end
+
 local function getTeamPlayers(teamName)
 	local result = {}
 	for _, player in ipairs(Players:GetPlayers()) do
@@ -802,7 +885,44 @@ local function getTensionState(a, b)
 	end
 end
 
-local function updateGhostPartners()
+local function setCpuPartnerActive(part, active)
+	part:SetAttribute("CpuFillActive", active)
+	local label = part:FindFirstChild("TD_CPU_Label")
+	if label and label:IsA("BillboardGui") then
+		label.Enabled = active and Config.CpuFillEnabled == true
+	end
+	if active then
+		if Config.CpuFillEnabled then
+			part.Transparency = (Config.CpuFillPartnerVisible == false) and 1 or 0.18
+		else
+			part.Transparency = (Config.GhostPartnerVisible == true) and 0.55 or (Config.GhostPartTransparency or 1)
+		end
+	else
+		part.Transparency = 1
+		part:SetAttribute("CpuPinning", false)
+	end
+end
+
+local function teamZClamp(teamName, z)
+	local total = totalHalfDepth() - 3
+	if teamName == "Red" then
+		return math.clamp(z, 3, total)
+	end
+	return math.clamp(z, -total, -3)
+end
+
+local function moveCpuPartner(part, target, dt)
+	local delta = target - part.Position
+	local distance = delta.Magnitude
+	if distance <= 0.05 then
+		part.Position = target
+		return
+	end
+	local step = (Config.CpuFillMoveSpeed or 18) * math.max(dt, 1 / 60)
+	part.Position = part.Position + delta.Unit * math.min(step, distance)
+end
+
+local function updateCpuFillPartners(dt)
 	if not Config.AllowGhostPartners then
 		return
 	end
@@ -819,22 +939,56 @@ local function updateGhostPartners()
 		end
 
 		local ghosts = ghostPartners[teamName]
+		local trackX = math.clamp(ball.position.X, -halfWidth() + 6, halfWidth() - 6)
+		local baseZ = side * (Config.CpuFillCourtZ or 18)
+		if ball.active then
+			baseZ = teamZClamp(teamName, ball.position.Z + side * (Config.CpuFillBallTrackZOffset or 5))
+		end
+		local span = Config.CpuFillNetSpan or 14
+
 		if #realRoots == 0 then
-			if ghosts[1] then ghosts[1].Position = Vector3.new(-8, Config.NetVisualHeight, side * 18) end
-			if ghosts[2] then ghosts[2].Position = Vector3.new(8, Config.NetVisualHeight, side * 18) end
+			local targets = {
+				Vector3.new(math.clamp(trackX - span / 2, -halfWidth() + 3, halfWidth() - 3), Config.NetVisualHeight, baseZ),
+				Vector3.new(math.clamp(trackX + span / 2, -halfWidth() + 3, halfWidth() - 3), Config.NetVisualHeight, baseZ),
+			}
+			for i = 1, 2 do
+				if ghosts[i] then
+					setCpuPartnerActive(ghosts[i], true)
+					if Config.CpuFillEnabled then
+						moveCpuPartner(ghosts[i], targets[i], dt)
+					else
+						ghosts[i].Position = targets[i]
+					end
+				end
+			end
 		elseif #realRoots == 1 then
 			local root = realRoots[1]
-			local offsetX = (root.Position.X < 0) and 14 or -14
+			local offsetX = (root.Position.X < trackX) and span or -span
 			local target = Vector3.new(
 				math.clamp(root.Position.X + offsetX, -halfWidth() + 3, halfWidth() - 3),
 				Config.NetVisualHeight,
-				math.clamp(root.Position.Z, side == 1 and 3 or -totalHalfDepth() + 3, side == 1 and totalHalfDepth() - 3 or -3)
+				teamZClamp(teamName, root.Position.Z)
 			)
-			if ghosts[1] then ghosts[1].Position = target end
+			if ghosts[1] then
+				setCpuPartnerActive(ghosts[1], true)
+				if Config.CpuFillEnabled then
+					moveCpuPartner(ghosts[1], target, dt)
+				else
+					ghosts[1].Position = target
+				end
+			end
+			if ghosts[2] then
+				setCpuPartnerActive(ghosts[2], false)
+				ghosts[2].Position = Vector3.new(-1000, -1000, -1000)
+			end
 		else
 			-- Hide ghosts below the floor when the real pair exists.
-			if ghosts[1] then ghosts[1].Position = Vector3.new(-1000, -1000, -1000) end
-			if ghosts[2] then ghosts[2].Position = Vector3.new(-1000, -1000, -1000) end
+			for i = 1, 2 do
+				if ghosts[i] then
+					setCpuPartnerActive(ghosts[i], false)
+					ghosts[i].Position = Vector3.new(-1000, -1000, -1000)
+				end
+			end
 		end
 	end
 end
@@ -857,7 +1011,7 @@ local function updateTeamBeam(teamName)
 	beam.Attachment1 = b.attachment
 
 	local tensionState = getTensionState(a, b)
-	local realPinCount = countRealPinning(teamName)
+	local realPinCount = countRealPinning(teamName) + countCpuPinning(teamName)
 	local color = BEAM_COLORS[tensionState] or BEAM_COLORS.Normal
 	local width = Config.BeamWidth
 	local transparency = 0.12
@@ -911,6 +1065,19 @@ local function getTeamPinInfo(teamName)
 				pinCount += 1
 				realPinning = true
 				realPinStart = state.LastPinStartTime
+				minStart = math.min(minStart, state.LastPinStartTime)
+				maxStart = math.max(maxStart, state.LastPinStartTime)
+			end
+		end
+	end
+
+	if Config.CpuFillEnabled then
+		local states = cpuPartnerState[teamName]
+		for i = 1, 2 do
+			local partner = ghostPartners[teamName] and ghostPartners[teamName][i]
+			local state = states and states[i]
+			if partner and partner:GetAttribute("CpuFillActive") == true and state and state.IsPinning then
+				pinCount += 1
 				minStart = math.min(minStart, state.LastPinStartTime)
 				maxStart = math.max(maxStart, state.LastPinStartTime)
 			end
@@ -1463,6 +1630,66 @@ local function updateBall(dt)
 	processGroundOrOut()
 end
 
+local function updateCpuPinning()
+	if not Config.CpuFillEnabled then
+		for teamName, states in pairs(cpuPartnerState) do
+			for i = 1, 2 do
+				if states[i] then
+					states[i].IsPinning = false
+				end
+				local partner = ghostPartners[teamName] and ghostPartners[teamName][i]
+				if partner then
+					partner:SetAttribute("CpuPinning", false)
+				end
+			end
+		end
+		return
+	end
+
+	local now = os.clock()
+	for _, teamName in ipairs({ "Red", "Blue" }) do
+		local side = MathUtil.teamSideSign(teamName)
+		local humanPinStart = getHumanPinStart(teamName)
+		local humanPinning = humanPinStart ~= nil
+		local leadTime = Config.CpuFillAutoPinLeadTime or 1.25
+		local predictedZ = ball.position.Z + ball.velocity.Z * leadTime
+		local ballThreatening = ball.active and roundActive and (
+			ball.velocity.Z * side > 0 or predictedZ * side > -4
+		)
+		local states = cpuPartnerState[teamName]
+		for i = 1, 2 do
+			local partner = ghostPartners[teamName] and ghostPartners[teamName][i]
+			local state = states and states[i]
+			if partner and state and partner:GetAttribute("CpuFillActive") == true then
+				local nearBall = ball.active and ((partner.Position - ball.position).Magnitude <= (Config.CpuFillReactionDistance or 18))
+				if now >= (state.NextPinDecisionAt or 0) then
+					state.NextPinDecisionAt = now + 0.28
+					local shouldPin = (humanPinning or nearBall or ballThreatening) and (math.random() <= (Config.CpuFillAutoPinChance or 0.72))
+					if humanPinning then
+						shouldPin = true
+					end
+					if shouldPin and not state.IsPinning then
+						state.LastPinStartTime = humanPinStart or now
+					end
+					state.IsPinning = shouldPin
+				end
+				partner:SetAttribute("CpuPinning", state.IsPinning)
+				if state.IsPinning then
+					partner.Color = TEAM_COLORS[teamName]:Lerp(BEAM_COLORS.Hare, 0.55)
+				else
+					partner.Color = TEAM_COLORS[teamName]
+				end
+			elseif state then
+				state.IsPinning = false
+				if partner then
+					partner:SetAttribute("CpuPinning", false)
+					partner.Color = TEAM_COLORS[teamName]
+				end
+			end
+		end
+	end
+end
+
 local function canStartMatch()
 	local count = #Players:GetPlayers()
 	if Config.AllowGhostPartners then
@@ -1577,7 +1804,8 @@ end)
 RunService.Heartbeat:Connect(function(dt)
 	clampPlayersToCourt()
 	updatePinIndicators()
-	updateGhostPartners()
+	updateCpuFillPartners(dt)
+	updateCpuPinning()
 	updateTeamBeam("Red")
 	updateTeamBeam("Blue")
 	updateBall(dt)

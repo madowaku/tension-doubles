@@ -413,6 +413,14 @@ local function updateNetGuidance(data)
 	end
 end
 
+local function cpuFillCount(data)
+	local cpuPlayers = data.cpuPlayers
+	if typeof(cpuPlayers) ~= "table" then
+		return 0
+	end
+	return (cpuPlayers.Red or 0) + (cpuPlayers.Blue or 0)
+end
+
 MatchStateEvent.OnClientEvent:Connect(function(data)
 	applyResponsiveLayout()
 	local redScore = data.redScore or 0
@@ -426,7 +434,9 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 	if state == "WaitingForPlayers" then
 		showOnboardingOnce()
 		setMessage("WAITING", 0)
-		if message ~= "" then
+		if Config.CpuFillEnabled and cpuFillCount(data) > 0 then
+			subMessageLabel.Text = Config.CpuFillMatchSubMessage or Config.WaitingSubMessage or message
+		elseif message ~= "" then
 			subMessageLabel.Text = Config.WaitingSubMessage or message
 		else
 			subMessageLabel.Text = Config.WaitingSubMessage or string.format("Red %d/2 - Blue %d/2", data.redPlayers or 0, data.bluePlayers or 0)
