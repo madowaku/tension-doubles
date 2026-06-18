@@ -10,6 +10,9 @@
     "ServerScriptService": {
       "TDServer": {
         "$path": "src/ServerScriptService/TDServer.server.lua"
+      },
+      "TDArenaBuilder": {
+        "$path": "scripts/roblox/build_tile_field_64_arena.server.lua"
       }
     },
     "StarterPlayer": {

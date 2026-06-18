@@ -1,0 +1,108 @@
+version: 2
+
+goal:
+  title: "Lobby Polish And Tutorial Board"
+  slug: "lobby-polish-tutorial-board"
+  kind: specific
+  tranche: "Finish the approved HUD cleanup, add the native tutorial board, verify narrowly, and push."
+  status: done
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: worker
+    assignee: Worker
+    status: done
+    objective: "Complete direction-A HUD cleanup and add the non-player-blocking native lobby tutorial board."
+    inputs:
+      - "tention.md direction A"
+      - "assets/launch-art/v10-lobby-how-to-play-signboard-1920x1080.png"
+      - "README.md"
+      - "docs/playtests/v10-public-beta-checklist.md"
+    constraints:
+      - "Preserve existing dirty work and current gameplay behavior."
+      - "Keep READY dominant and mobile controls unobstructed."
+      - "Do not add or alter gameplay features."
+    expected_output:
+      - "HUD layout cleanup"
+      - "Native tutorial board"
+      - "Updated contracts and public-beta smoke check"
+    allowed_files:
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+      - "scripts/verify-lobby-ui-hierarchy.ps1"
+      - "scripts/verify-v10-public-beta.ps1"
+      - "docs/playtests/v10-public-beta-checklist.md"
+      - "README.md"
+      - "docs/goals/lobby-polish-tutorial-board/state.yaml"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-lobby-ui-hierarchy.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-v10-public-beta.ps1"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+    stop_if:
+      - "The requested result requires gameplay changes."
+      - "Required edits extend outside allowed_files."
+      - "Verification fails twice for the same unresolved reason."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+        - "scripts/verify-lobby-ui-hierarchy.ps1"
+        - "scripts/verify-v10-public-beta.ps1"
+        - "docs/playtests/v10-public-beta-checklist.md"
+      summary: "Completed the approved direction-A HUD hierarchy and added a native three-card HOW TO PLAY board. The board uses public-beta copy, lives off the lobby's main path, and is explicitly non-collidable/non-touching. Mobile guide placement and top-right audio placement are source-contracted."
+      commands:
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-lobby-ui-hierarchy.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-v10-public-beta.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-tdserver-startup-compile.ps1"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    objective: "Audit the implementation and fresh verification against the approved lobby and tutorial-board outcome."
+    inputs:
+      - "T001 receipt"
+      - "Current diff"
+      - "Fresh verification output"
+    constraints:
+      - "Reject completion if READY dominance, mobile readability, non-blocking board behavior, or source contracts are not evidenced."
+    expected_output:
+      - "complete | not_complete"
+      - "missing evidence"
+      - "smallest Studio smoke check"
+    receipt:
+      result: done
+      decision: complete
+      summary: "The approved lobby cleanup is implemented: READY remains the dominant centered action; one active guide step plus secondary mode/theme summaries remains readable in mobile-safe space; audio stays top-right and hides during match flow; and the native HOW TO PLAY board carries the launch-art/public-beta loop without blocking players. Focused contracts, startup compile pressure, and Rojo build all pass."
+      evidence:
+        - "scripts/verify-lobby-ui-hierarchy.ps1: pass"
+        - "scripts/verify-v10-public-beta.ps1: pass"
+        - "scripts/verify-tdserver-startup-compile.ps1: pass"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx: pass"
+      smallest_studio_smoke_check: "Solo preset, one mobile-landscape client: read and walk through the HOW TO PLAY board, confirm READY dominates and guide/audio do not collide with bottom controls, press READY, and confirm the state leaves lobby with no red Output errors."

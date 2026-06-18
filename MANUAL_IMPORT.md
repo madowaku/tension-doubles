@@ -47,6 +47,35 @@ Paste the contents from:
 src/ServerScriptService/TDServer.server.lua
 ```
 
+If the screen is blank in Play mode, check this first: `ServerScriptService` must contain `TDServer`. Without `TDServer`, the lobby and `TensionDoublesRemotes` are never created, so the client HUD can only show the fallback warning.
+
+Create one more Script:
+
+```text
+TDArenaBuilder
+```
+
+Paste the contents from:
+
+```text
+scripts/roblox/build_tile_field_64_arena.server.lua
+```
+
+When Play starts, this creates the reusable arena models:
+
+```text
+ServerStorage
+├─ Arenas
+│  ├─ Arena_Grass
+│  ├─ Arena_Rooftop
+│  ├─ Arena_School
+│  ├─ Arena_Festival
+│  └─ Arena_Space
+└─ TDArena_TileField64
+```
+
+The playable arena models are kept in `ServerStorage/Arenas` so the selected court can be cloned into `Workspace` without mixing it into the lobby. `TDArena_TileField64` remains as the legacy Grass alias.
+
 ## 4. StarterPlayerScripts
 
 Open:
@@ -84,4 +113,3 @@ For real 2v2 play, edit `GameConfig.lua`:
 AllowGhostPartners = false
 MinPlayersToAutoStart = 4
 ```
-

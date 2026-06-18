@@ -2,7 +2,9 @@
 -- Return Balance Patch: safer score placement, rotate hint, shorter touch copy.
 
 local Players = game:GetService("Players")
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local StarterGui = game:GetService("StarterGui")
@@ -10,14 +12,21 @@ local StarterGui = game:GetService("StarterGui")
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
 
-local Remotes = ReplicatedStorage:WaitForChild("TensionDoublesRemotes")
-local MatchStateEvent = Remotes:WaitForChild("MatchStateEvent")
-local HitFxEvent = Remotes:WaitForChild("HitFxEvent")
 local Config = require(ReplicatedStorage:WaitForChild("TDShared"):WaitForChild("GameConfig"))
+local Remotes = ReplicatedStorage:WaitForChild("TensionDoublesRemotes", 5)
+local remotesReady = Remotes ~= nil
+local MatchStateEvent = remotesReady and Remotes:WaitForChild("MatchStateEvent", 5) or nil
+local HitFxEvent = remotesReady and Remotes:WaitForChild("HitFxEvent", 5) or nil
+local MonetizationRequestEvent = remotesReady and Remotes:WaitForChild("MonetizationRequestEvent", 5) or nil
+local MonetizationStateEvent = remotesReady and Remotes:WaitForChild("MonetizationStateEvent", 5) or nil
 
 local isTouch = UserInputService.TouchEnabled
 local isGamepad = UserInputService.GamepadEnabled and not isTouch
 local subMessageHoldUntil = 0
+local lobbyGuideCompleted = false
+local lobbyGuideStarted = false
+local selectedModeLabel = Config.LobbyDefaultModeLabel or "Quick 2v2"
+local lobbyReadyStatus = { ready = 0, needed = 1 }
 
 local function preferLandscape()
 	if not isTouch or Config.PreferLandscape == false then
@@ -68,6 +77,336 @@ netGuideLabel.BackgroundColor3 = Color3.fromRGB(8, 12, 22)
 netGuideLabel.BackgroundTransparency = 0.38
 netGuideLabel.ZIndex = 12
 netGuideLabel.Text = ""
+
+local lobbyGuidePanel = Instance.new("Frame")
+lobbyGuidePanel.Name = "LobbyJoinGuide"
+lobbyGuidePanel.AnchorPoint = Vector2.new(0.5, 0.5)
+lobbyGuidePanel.Position = UDim2.fromScale(0.5, 0.70)
+lobbyGuidePanel.Size = UDim2.fromScale(0.58, 0.14)
+lobbyGuidePanel.BackgroundColor3 = Color3.fromRGB(7, 12, 22)
+lobbyGuidePanel.BackgroundTransparency = 0.16
+lobbyGuidePanel.Visible = false
+lobbyGuidePanel.ZIndex = 18
+lobbyGuidePanel.Parent = gui
+
+local lobbyGuideCorner = Instance.new("UICorner")
+lobbyGuideCorner.CornerRadius = UDim.new(0, 10)
+lobbyGuideCorner.Parent = lobbyGuidePanel
+
+local lobbyGuideStroke = Instance.new("UIStroke")
+lobbyGuideStroke.Color = Color3.fromRGB(255, 220, 90)
+lobbyGuideStroke.Thickness = 2
+lobbyGuideStroke.Transparency = 0.18
+lobbyGuideStroke.Parent = lobbyGuidePanel
+
+local lobbyActiveStepLabel = Instance.new("TextLabel")
+lobbyActiveStepLabel.Name = "ActiveStep"
+lobbyActiveStepLabel.BackgroundColor3 = Color3.fromRGB(255, 220, 90)
+lobbyActiveStepLabel.BackgroundTransparency = 0.04
+lobbyActiveStepLabel.Position = UDim2.fromScale(0.03, 0.08)
+lobbyActiveStepLabel.Size = UDim2.fromScale(0.94, 0.48)
+lobbyActiveStepLabel.Font = Enum.Font.GothamBlack
+lobbyActiveStepLabel.Text = Config.LobbyGuideStepModeText or "1  CHOOSE MODE"
+lobbyActiveStepLabel.TextColor3 = Color3.fromRGB(28, 24, 10)
+lobbyActiveStepLabel.TextScaled = true
+lobbyActiveStepLabel.TextWrapped = true
+lobbyActiveStepLabel.ZIndex = 19
+lobbyActiveStepLabel.Parent = lobbyGuidePanel
+
+local lobbyActiveStepCorner = Instance.new("UICorner")
+lobbyActiveStepCorner.CornerRadius = UDim.new(0, 8)
+lobbyActiveStepCorner.Parent = lobbyActiveStepLabel
+
+local lobbyModeSummaryLabel = Instance.new("TextLabel")
+lobbyModeSummaryLabel.Name = "ModeSummary"
+lobbyModeSummaryLabel.BackgroundTransparency = 1
+lobbyModeSummaryLabel.Position = UDim2.fromScale(0.04, 0.62)
+lobbyModeSummaryLabel.Size = UDim2.fromScale(0.44, 0.28)
+lobbyModeSummaryLabel.Font = Enum.Font.GothamBold
+lobbyModeSummaryLabel.TextColor3 = Color3.fromRGB(225, 235, 248)
+lobbyModeSummaryLabel.TextScaled = true
+lobbyModeSummaryLabel.TextWrapped = true
+lobbyModeSummaryLabel.TextXAlignment = Enum.TextXAlignment.Left
+lobbyModeSummaryLabel.ZIndex = 19
+lobbyModeSummaryLabel.Parent = lobbyGuidePanel
+
+local lobbyThemeSummaryLabel = Instance.new("TextLabel")
+lobbyThemeSummaryLabel.Name = "ThemeSummary"
+lobbyThemeSummaryLabel.BackgroundTransparency = 1
+lobbyThemeSummaryLabel.Position = UDim2.fromScale(0.52, 0.62)
+lobbyThemeSummaryLabel.Size = UDim2.fromScale(0.44, 0.28)
+lobbyThemeSummaryLabel.Font = Enum.Font.GothamBold
+lobbyThemeSummaryLabel.TextColor3 = Color3.fromRGB(225, 235, 248)
+lobbyThemeSummaryLabel.TextScaled = true
+lobbyThemeSummaryLabel.TextWrapped = true
+lobbyThemeSummaryLabel.TextXAlignment = Enum.TextXAlignment.Right
+lobbyThemeSummaryLabel.ZIndex = 19
+lobbyThemeSummaryLabel.Parent = lobbyGuidePanel
+
+if not MatchStateEvent then
+	messageLabel.Text = Config.ServerMissingMessage or "SERVER SCRIPT MISSING"
+	subMessageLabel.Text = Config.ServerMissingSubMessage or "Import TDServer into ServerScriptService, then Play again."
+	netGuideLabel.Text = ""
+end
+
+local musicVolume = math.clamp(Config.MusicDefaultVolume or Config.BgmDefaultVolume or 0.55, 0, 1)
+local sfxVolume = math.clamp(Config.SfxDefaultVolume or 0.70, 0, 1)
+local uiVolume = math.clamp(Config.UiDefaultVolume or 0.65, 0, 1)
+local musicSoundGroup = nil
+local sfxSoundGroup = nil
+local uiSoundGroup = nil
+
+local function getOrCreateSoundGroup(groupName, volume)
+	local soundGroup = SoundService:FindFirstChild(groupName)
+	if not soundGroup then
+		soundGroup = Instance.new("SoundGroup")
+		soundGroup.Name = groupName
+		soundGroup.Parent = SoundService
+	end
+	soundGroup.Volume = volume
+	return soundGroup
+end
+
+local function ensureAudioSoundGroups()
+	if Config.AudioMixerEnabled == false then
+		return
+	end
+	musicSoundGroup = getOrCreateSoundGroup(Config.MusicSoundGroupName or "TDMusic", musicVolume)
+	sfxSoundGroup = getOrCreateSoundGroup(Config.SfxSoundGroupName or "TDSFX", sfxVolume)
+	uiSoundGroup = getOrCreateSoundGroup(Config.UiSoundGroupName or "TDUI", uiVolume)
+end
+
+ensureAudioSoundGroups()
+
+local function makeMixerPanel(name, title, y)
+	local panel = Instance.new("Frame")
+	panel.Name = name
+	panel.AnchorPoint = Vector2.new(1, 0)
+	panel.Position = UDim2.fromScale(Config.AudioMixerTopRightX or 0.985, y)
+	panel.Size = UDim2.fromScale(isTouch and 0.27 or 0.18, isTouch and 0.058 or 0.052)
+	panel.BackgroundColor3 = Color3.fromRGB(8, 12, 22)
+	panel.BackgroundTransparency = 0.22
+	panel.Visible = Config.BgmVolumeControlEnabled ~= false and Config.AudioMixerEnabled ~= false
+	panel.ZIndex = 52
+	panel.Parent = gui
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = panel
+
+	local label = Instance.new("TextLabel")
+	label.BackgroundTransparency = 1
+	label.Position = UDim2.fromScale(0.05, 0.10)
+	label.Size = UDim2.fromScale(0.46, 0.80)
+	label.Font = Enum.Font.GothamBlack
+	label.Text = title
+	label.TextColor3 = Color3.fromRGB(255, 245, 180)
+	label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	label.TextStrokeTransparency = 0.35
+	label.TextScaled = true
+	label.TextXAlignment = Enum.TextXAlignment.Left
+	label.ZIndex = 53
+	label.Parent = panel
+
+	return panel, label
+end
+
+local musicPanel, musicLabel = makeMixerPanel("MusicVolumePanel", Config.BgmPanelTitle or "MUSIC", Config.AudioMixerMusicY or 0.075)
+local sfxPanel, sfxLabel = makeMixerPanel("SfxVolumePanel", Config.SfxPanelTitle or "SFX", Config.AudioMixerSfxY or 0.140)
+
+local bgmPanel = musicPanel
+local bgmLabel = musicLabel
+
+local function setMixerPanelsVisibleForState(state)
+	local visible = Config.BgmVolumeControlEnabled ~= false and Config.AudioMixerEnabled ~= false
+	if visible and Config.AudioMixerHideDuringMatch ~= false then
+		local visibleStates = Config.AudioMixerVisibleStates or {}
+		visible = visibleStates[state] == true
+	end
+	musicPanel.Visible = visible
+	sfxPanel.Visible = visible
+end
+
+local function setLobbyPlayerListVisible(state)
+	local inLobby = state == "Lobby" or state == "WaitingForPlayers"
+	pcall(function()
+		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.PlayerList, not inLobby)
+	end)
+end
+
+local function makeBgmButton(parent, name, text, x)
+	local button = Instance.new("TextButton")
+	button.Name = name
+	button.AnchorPoint = Vector2.new(0, 0.5)
+	button.Position = UDim2.fromScale(x, 0.50)
+	button.Size = UDim2.fromScale(0.17, 0.70)
+	button.BackgroundColor3 = Color3.fromRGB(255, 220, 110)
+	button.Text = text
+	button.TextColor3 = Color3.fromRGB(8, 12, 22)
+	button.Font = Enum.Font.GothamBlack
+	button.TextScaled = true
+	button.ZIndex = 54
+	button.Parent = parent
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 7)
+	corner.Parent = button
+	return button
+end
+
+local bgmDownButton = makeBgmButton(musicPanel, "Down", "-", 0.58)
+local bgmUpButton = makeBgmButton(musicPanel, "Up", "+", 0.78)
+local sfxDownButton = makeBgmButton(sfxPanel, "Down", "-", 0.58)
+local sfxUpButton = makeBgmButton(sfxPanel, "Up", "+", 0.78)
+
+local function findBgmSounds()
+	local found = {}
+	local fallbackSounds = {}
+	local names = Config.BgmSoundNames or { "BGM", "Music", "BackgroundMusic", "TD_BGM" }
+	local function isNamedBgmSound(soundName)
+		for _, name in ipairs(names) do
+			if string.lower(soundName) == string.lower(tostring(name)) then
+				return true
+			end
+		end
+		return false
+	end
+	local function isCharacterSound(sound)
+		local ancestor = sound.Parent
+		while ancestor do
+			if ancestor:IsA("Model") and ancestor:FindFirstChildOfClass("Humanoid") then
+				return true
+			end
+			ancestor = ancestor.Parent
+		end
+		return false
+	end
+	for _, container in ipairs({ SoundService, workspace }) do
+		for _, descendant in ipairs(container:GetDescendants()) do
+			if descendant:IsA("Sound") and not isCharacterSound(descendant) then
+				if isNamedBgmSound(descendant.Name) then
+					table.insert(found, descendant)
+				else
+					table.insert(fallbackSounds, descendant)
+				end
+			end
+		end
+	end
+	if #found == 0 then
+		return fallbackSounds
+	end
+	return found
+end
+
+local function updateBgmLabel(foundCount)
+	local title = Config.BgmPanelTitle or "BGM"
+	bgmLabel.Text = string.format("%s %d%%", title, math.floor(musicVolume * 100 + 0.5))
+end
+
+local function updateSfxLabel()
+	local title = Config.SfxPanelTitle or "SFX"
+	sfxLabel.Text = string.format("%s %d%%", title, math.floor(sfxVolume * 100 + 0.5))
+end
+
+local function applyMusicVolume()
+	ensureAudioSoundGroups()
+	local sounds = findBgmSounds()
+	for _, sound in ipairs(sounds) do
+		sound.SoundGroup = musicSoundGroup
+		sound.Volume = musicVolume
+	end
+	updateBgmLabel(#sounds)
+end
+
+local function applyBgmVolume()
+	applyMusicVolume()
+end
+
+local function applySfxVolume()
+	ensureAudioSoundGroups()
+	if sfxSoundGroup then
+		sfxSoundGroup.Volume = sfxVolume
+	end
+	if uiSoundGroup then
+		uiSoundGroup.Volume = uiVolume
+	end
+	updateSfxLabel()
+end
+
+local function playOneShot(soundId, soundGroup, volumeScale, playbackSpeed)
+	if Config.AudioMixerEnabled == false or not soundId or soundId == "" then
+		return
+	end
+	ensureAudioSoundGroups()
+	local sound = Instance.new("Sound")
+	sound.SoundId = soundId
+	sound.Volume = volumeScale or 1
+	sound.PlaybackSpeed = playbackSpeed or 1
+	sound.SoundGroup = soundGroup
+	sound.Parent = SoundService
+	sound:Play()
+	Debris:AddItem(sound, 3)
+end
+
+local function playGameSfx(key)
+	local ids = Config.AudioSfxSoundIds or {}
+	local soundId = ids[key] or ids.Normal
+	local speed = 1
+	if key == "Hare" then
+		speed = 0.86
+	elseif key == "OnePin" then
+		speed = 1.18
+	elseif key == "Slack" then
+		speed = 0.72
+	elseif key == "Countdown" then
+		speed = 1.0
+	elseif key == "Start" then
+		speed = 1.24
+	end
+	playOneShot(soundId, sfxSoundGroup, 1, speed)
+end
+
+local function playUiSfx(key)
+	local ids = Config.AudioSfxSoundIds or {}
+	playOneShot(ids[key or "UiClick"] or ids.UiClick, uiSoundGroup, 0.65, 1.18)
+end
+
+bgmDownButton.Activated:Connect(function()
+	musicVolume = math.clamp(musicVolume - (Config.AudioVolumeStep or Config.BgmVolumeStep or 0.10), 0, 1)
+	applyMusicVolume()
+	playUiSfx("UiClick")
+end)
+
+bgmUpButton.Activated:Connect(function()
+	musicVolume = math.clamp(musicVolume + (Config.AudioVolumeStep or Config.BgmVolumeStep or 0.10), 0, 1)
+	applyMusicVolume()
+	playUiSfx("UiClick")
+end)
+
+sfxDownButton.Activated:Connect(function()
+	sfxVolume = math.clamp(sfxVolume - (Config.AudioVolumeStep or 0.10), 0, 1)
+	applySfxVolume()
+	playUiSfx("UiClick")
+end)
+
+sfxUpButton.Activated:Connect(function()
+	sfxVolume = math.clamp(sfxVolume + (Config.AudioVolumeStep or 0.10), 0, 1)
+	applySfxVolume()
+	playUiSfx("UiClick")
+end)
+
+task.defer(applyMusicVolume)
+task.defer(applySfxVolume)
+SoundService.DescendantAdded:Connect(function(descendant)
+	if descendant:IsA("Sound") then
+		task.defer(applyMusicVolume)
+	end
+end)
+workspace.DescendantAdded:Connect(function(descendant)
+	if descendant:IsA("Sound") then
+		task.defer(applyMusicVolume)
+	end
+end)
 
 local rotateHint = Instance.new("Frame")
 rotateHint.Name = "RotateHint"
@@ -133,6 +472,7 @@ local function applyResponsiveLayout()
 		messageLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileMessageYPortrait or 0.205) or (Config.MobileMessageYLandscape or 0.215))
 		messageLabel.TextSize = portrait and 37 or 44
 		subMessageLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileSubMessageYPortrait or 0.300) or (Config.MobileSubMessageYLandscape or 0.315))
+		subMessageLabel.Size = UDim2.fromScale(0.86, 0.07)
 		subMessageLabel.TextSize = portrait and 18 or 21
 		hintLabel.Position = UDim2.fromScale(0.5, portrait and (Config.MobileHintYPortrait or 0.865) or (Config.MobileHintYLandscape or 0.895))
 		hintLabel.Size = UDim2.fromScale(portrait and 0.82 or 0.66, portrait and 0.07 or 0.06)
@@ -142,6 +482,11 @@ local function applyResponsiveLayout()
 		netGuideLabel.Size = UDim2.fromScale(portrait and (Config.MobileNetGuideWidthPortrait or 0.72) or (Config.MobileNetGuideWidthLandscape or 0.60), portrait and 0.060 or 0.064)
 		netGuideLabel.TextSize = portrait and 18 or 18
 		netGuideLabel.BackgroundTransparency = portrait and 0.42 or (Config.MobileNetGuideBgTransparencyLandscape or 0.56)
+		lobbyGuidePanel.Position = UDim2.fromScale(0.5, portrait and (Config.LobbyGuideYTouchPortrait or 0.690) or (Config.LobbyGuideYTouchLandscape or 0.700))
+		lobbyGuidePanel.Size = UDim2.fromScale(
+			portrait and (Config.LobbyGuideWidthTouchPortrait or 0.84) or (Config.LobbyGuideWidthTouchLandscape or 0.62),
+			portrait and 0.145 or 0.130
+		)
 		rotateHint.Visible = Config.ShowRotateHint ~= false and portrait
 		if Config.MobileRotateHintNonBlocking ~= false then
 			rotateHint.Position = UDim2.fromScale(0.5, 0.405)
@@ -156,6 +501,7 @@ local function applyResponsiveLayout()
 		messageLabel.Position = UDim2.fromScale(0.5, 0.19)
 		messageLabel.TextSize = 48
 		subMessageLabel.Position = UDim2.fromScale(0.5, 0.285)
+		subMessageLabel.Size = UDim2.fromScale(0.86, 0.07)
 		subMessageLabel.TextSize = 22
 		hintLabel.Position = UDim2.fromScale(0.5, 0.93)
 		hintLabel.TextSize = 22
@@ -164,6 +510,8 @@ local function applyResponsiveLayout()
 		netGuideLabel.Size = UDim2.fromScale(0.46, 0.062)
 		netGuideLabel.TextSize = 22
 		netGuideLabel.BackgroundTransparency = 0.38
+		lobbyGuidePanel.Position = UDim2.fromScale(0.5, Config.LobbyGuideYDesktop or 0.700)
+		lobbyGuidePanel.Size = UDim2.fromScale(0.56, 0.130)
 		rotateHint.Visible = false
 	end
 end
@@ -266,6 +614,200 @@ local function tweenTutorial(transparency)
 	}):Play()
 end
 
+local shopPanel = Instance.new("Frame")
+shopPanel.Name = "CosmeticShop"
+shopPanel.AnchorPoint = Vector2.new(1, 0.5)
+shopPanel.Position = UDim2.fromScale(0.985, 0.52)
+shopPanel.Size = UDim2.fromScale(isTouch and 0.44 or 0.30, isTouch and 0.44 or 0.42)
+shopPanel.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
+shopPanel.BackgroundTransparency = 0.10
+shopPanel.Visible = false
+shopPanel.ZIndex = 60
+shopPanel.Parent = gui
+
+local shopCorner = Instance.new("UICorner")
+shopCorner.CornerRadius = UDim.new(0, 10)
+shopCorner.Parent = shopPanel
+
+local shopStroke = Instance.new("UIStroke")
+shopStroke.Color = Color3.fromRGB(255, 190, 105)
+shopStroke.Thickness = 2
+shopStroke.Transparency = 0.12
+shopStroke.Parent = shopPanel
+
+local shopTitle = Instance.new("TextLabel")
+shopTitle.BackgroundTransparency = 1
+shopTitle.Position = UDim2.fromScale(0.06, 0.04)
+shopTitle.Size = UDim2.fromScale(0.76, 0.12)
+shopTitle.Font = Enum.Font.GothamBlack
+shopTitle.Text = Config.MonetizationShopTitle or "COSMETIC SHOP"
+shopTitle.TextColor3 = Color3.fromRGB(255, 226, 118)
+shopTitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+shopTitle.TextStrokeTransparency = 0.25
+shopTitle.TextScaled = true
+shopTitle.TextXAlignment = Enum.TextXAlignment.Left
+shopTitle.ZIndex = 61
+shopTitle.Parent = shopPanel
+
+local shopClose = Instance.new("TextButton")
+shopClose.Name = "Close"
+shopClose.AnchorPoint = Vector2.new(1, 0)
+shopClose.Position = UDim2.fromScale(0.96, 0.045)
+shopClose.Size = UDim2.fromScale(0.12, 0.12)
+shopClose.BackgroundColor3 = Color3.fromRGB(36, 44, 58)
+shopClose.Text = "X"
+shopClose.TextColor3 = Color3.fromRGB(255, 255, 255)
+shopClose.Font = Enum.Font.GothamBlack
+shopClose.TextScaled = true
+shopClose.ZIndex = 62
+shopClose.Parent = shopPanel
+
+local shopCloseCorner = Instance.new("UICorner")
+shopCloseCorner.CornerRadius = UDim.new(0, 7)
+shopCloseCorner.Parent = shopClose
+
+local shopSubtitle = Instance.new("TextLabel")
+shopSubtitle.BackgroundTransparency = 1
+shopSubtitle.Position = UDim2.fromScale(0.06, 0.17)
+shopSubtitle.Size = UDim2.fromScale(0.88, 0.10)
+shopSubtitle.Font = Enum.Font.GothamBold
+shopSubtitle.Text = Config.MonetizationShopSubtitle or "Style only. No power boosts."
+shopSubtitle.TextColor3 = Color3.fromRGB(230, 240, 255)
+shopSubtitle.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+shopSubtitle.TextStrokeTransparency = 0.45
+shopSubtitle.TextScaled = true
+shopSubtitle.TextWrapped = true
+shopSubtitle.TextXAlignment = Enum.TextXAlignment.Left
+shopSubtitle.ZIndex = 61
+shopSubtitle.Parent = shopPanel
+
+local shopMessage = Instance.new("TextLabel")
+shopMessage.BackgroundTransparency = 1
+shopMessage.Position = UDim2.fromScale(0.06, 0.83)
+shopMessage.Size = UDim2.fromScale(0.88, 0.12)
+shopMessage.Font = Enum.Font.GothamBlack
+shopMessage.Text = ""
+shopMessage.TextColor3 = Color3.fromRGB(255, 210, 115)
+shopMessage.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+shopMessage.TextStrokeTransparency = 0.35
+shopMessage.TextScaled = true
+shopMessage.TextWrapped = true
+shopMessage.ZIndex = 61
+shopMessage.Parent = shopPanel
+
+local shopList = Instance.new("Frame")
+shopList.Name = "ProductList"
+shopList.BackgroundTransparency = 1
+shopList.Position = UDim2.fromScale(0.06, 0.30)
+shopList.Size = UDim2.fromScale(0.88, 0.50)
+shopList.ZIndex = 61
+shopList.Parent = shopPanel
+
+local shopLayout = Instance.new("UIListLayout")
+shopLayout.Padding = UDim.new(0, 8)
+shopLayout.SortOrder = Enum.SortOrder.LayoutOrder
+shopLayout.Parent = shopList
+
+shopClose.Activated:Connect(function()
+	shopPanel.Visible = false
+	playUiSfx("UiClick")
+end)
+
+local function clearShopRows()
+	for _, child in ipairs(shopList:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+end
+
+local function addShopRow(product, labels)
+	local row = Instance.new("Frame")
+	row.Name = tostring(product.key or "Product")
+	row.Size = UDim2.fromScale(1, 0.30)
+	row.BackgroundColor3 = Color3.fromRGB(22, 30, 44)
+	row.BackgroundTransparency = 0.05
+	row.ZIndex = 62
+	row.Parent = shopList
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	corner.Parent = row
+
+	local name = Instance.new("TextLabel")
+	name.BackgroundTransparency = 1
+	name.Position = UDim2.fromScale(0.04, 0.07)
+	name.Size = UDim2.fromScale(0.60, 0.34)
+	name.Font = Enum.Font.GothamBlack
+	name.Text = tostring(product.name or product.key or "Pass")
+	name.TextColor3 = Color3.fromRGB(255, 255, 255)
+	name.TextScaled = true
+	name.TextXAlignment = Enum.TextXAlignment.Left
+	name.ZIndex = 63
+	name.Parent = row
+
+	local description = Instance.new("TextLabel")
+	description.BackgroundTransparency = 1
+	description.Position = UDim2.fromScale(0.04, 0.45)
+	description.Size = UDim2.fromScale(0.60, 0.42)
+	description.Font = Enum.Font.GothamBold
+	description.Text = tostring(product.description or "")
+	description.TextColor3 = Color3.fromRGB(210, 224, 240)
+	description.TextScaled = true
+	description.TextWrapped = true
+	description.TextXAlignment = Enum.TextXAlignment.Left
+	description.ZIndex = 63
+	description.Parent = row
+
+	local button = Instance.new("TextButton")
+	button.Name = "Buy"
+	button.AnchorPoint = Vector2.new(1, 0.5)
+	button.Position = UDim2.fromScale(0.96, 0.50)
+	button.Size = UDim2.fromScale(0.28, 0.58)
+	button.BackgroundColor3 = product.owned and Color3.fromRGB(88, 146, 120) or Color3.fromRGB(255, 178, 82)
+	button.Text = product.owned and (labels.ownedLabel or "OWNED") or (labels.buyLabel or "BUY")
+	button.TextColor3 = Color3.fromRGB(10, 14, 24)
+	button.Font = Enum.Font.GothamBlack
+	button.TextScaled = true
+	button.ZIndex = 64
+	button.Parent = row
+
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0, 7)
+	buttonCorner.Parent = button
+
+	button.Activated:Connect(function()
+		if product.owned then
+			shopMessage.Text = labels.ownedLabel or "OWNED"
+			playUiSfx("UiClick")
+			return
+		end
+		playUiSfx("UiClick")
+		if MonetizationRequestEvent then
+			MonetizationRequestEvent:FireServer("Purchase", product.key)
+		else
+			shopMessage.Text = "Monetization UI is waiting for the server."
+		end
+	end)
+end
+
+local function updateShop(payload)
+	if payload.enabled == false then
+		shopPanel.Visible = false
+		return
+	end
+	shopTitle.Text = payload.title or Config.MonetizationShopTitle or "COSMETIC SHOP"
+	shopSubtitle.Text = payload.subtitle or Config.MonetizationShopSubtitle or "Style only. No power boosts."
+	shopMessage.Text = payload.message or ""
+	clearShopRows()
+	for _, product in ipairs(payload.products or {}) do
+		addShopRow(product, payload)
+	end
+	if payload.open == true then
+		shopPanel.Visible = true
+	end
+end
+
 local function showOnboardingOnce()
 	if tutorialShown or Config.OnboardingEnabled == false then
 		return
@@ -298,12 +840,26 @@ local function showOnboardingOnce()
 	end)
 end
 
-local function fxTextForType(fxType, comboCount)
-	if fxType == "Hare" then
-		if comboCount and comboCount >= 2 then
-			return "HARE!! x" .. tostring(comboCount), Color3.fromRGB(255, 230, 90)
+local function getHareHitText(comboCount)
+	local count = comboCount or 1
+	local selectedText = "HARE!!"
+	for _, style in ipairs(Config.HareHitTextStyles or {}) do
+		if count >= (style.AtCombo or 1) then
+			selectedText = style.Text or selectedText
 		end
-		return "HARE!!", Color3.fromRGB(255, 230, 90)
+	end
+	if count >= 2 then
+		selectedText = selectedText .. string.format(Config.HareHitTextComboSuffixFormat or " x%d", count)
+	end
+	return selectedText
+end
+
+local function fxTextForType(fxType, comboCount, isFirstHare)
+	if fxType == "Hare" then
+		if isFirstHare and Config.FirstHareCelebrationEnabled ~= false then
+			return Config.FirstHareMessage or "FIRST HARE!", Color3.fromRGB(255, 240, 120)
+		end
+		return getHareHitText(comboCount), Color3.fromRGB(255, 230, 90)
 	elseif fxType == "OnePin" then
 		return "ONE PIN!", Color3.fromRGB(255, 170, 95)
 	elseif fxType == "Slack" then
@@ -323,8 +879,8 @@ local function playHareFlash(comboCount)
 	}):Play()
 end
 
-local function showFloatingFx(fxType, teamName, rallyCount, comboCount)
-	local text, color = fxTextForType(fxType, comboCount)
+local function showFloatingFx(fxType, teamName, rallyCount, comboCount, isFirstHare)
+	local text, color = fxTextForType(fxType, comboCount, isFirstHare)
 	local label = Instance.new("TextLabel")
 	label.AnchorPoint = Vector2.new(0.5, 0.5)
 	label.BackgroundTransparency = 1
@@ -342,13 +898,14 @@ local function showFloatingFx(fxType, teamName, rallyCount, comboCount)
 	if fxType == "Hare" then
 		x = 0.5
 	end
-	label.Position = UDim2.fromScale(x, fxType == "Hare" and 0.46 or 0.50)
+	local fxY = fxType == "Hare" and (Config.HareFxY or 0.365) or (Config.HitFxY or 0.500)
+	label.Position = UDim2.fromScale(x, fxY)
 	label.Parent = fxLayer
 
 	if fxType == "Hare" then
 		playHareFlash(comboCount)
-		local hareSubtitle = Config.HareSubtitleText or "TEAM SYNC!"
-		if comboCount and comboCount >= 2 then
+		local hareSubtitle = isFirstHare and (Config.FirstHareSubtitle or "YOUR FIRST TEAM SYNC!") or (Config.HareSubtitleText or "TEAM SYNC!")
+		if not isFirstHare and comboCount and comboCount >= 2 then
 			hareSubtitle = hareSubtitle .. " x" .. tostring(comboCount)
 		end
 		subMessageLabel.Text = hareSubtitle
@@ -421,6 +978,117 @@ local function cpuFillCount(data)
 	return (cpuPlayers.Red or 0) + (cpuPlayers.Blue or 0)
 end
 
+local function getLocalIntStat(statName)
+	local leaderstats = localPlayer:FindFirstChild("leaderstats")
+	local stat = leaderstats and leaderstats:FindFirstChild(statName)
+	if stat and stat:IsA("IntValue") then
+		return stat.Value
+	end
+	return 0
+end
+
+local function formatDailyBoostProgress()
+	if Config.DailyBoostEnabled == false then
+		return ""
+	end
+	local hares = getLocalIntStat(Config.ProgressStatHares or "HAREs")
+	local bestRally = getLocalIntStat(Config.ProgressStatBestRally or "Best Rally")
+	local hareTarget = Config.DailyBoostHareTarget or 1
+	local rallyTarget = Config.DailyBoostRallyTarget or 4
+	if hares >= hareTarget and bestRally >= rallyTarget then
+		return Config.DailyBoostCompleteText or "Daily Boost ready!"
+	end
+	return string.format(
+		Config.DailyBoostHudFormat or "Daily: HARE %d/%d  Rally %d/%d",
+		math.min(hares, hareTarget),
+		hareTarget,
+		math.min(bestRally, rallyTarget),
+		rallyTarget
+	)
+end
+
+local function formatMatchResults(results)
+	if Config.MatchResultsEnabled == false or typeof(results) ~= "table" then
+		return Config.GameOverSubMessage or "NEXT MATCH INCOMING!"
+	end
+	local dailyText = formatDailyBoostProgress()
+	local suffix = dailyText ~= "" and ("\n" .. dailyText) or ""
+	return string.format(
+		"%s: %d   %s: %d\n%s: %d   %s: %d%s",
+		Config.MatchResultsHaresLabel or "HAREs",
+		results.hares or 0,
+		Config.MatchResultsShortBestRallyLabel or Config.MatchResultsBestRallyLabel or "Rally",
+		results.bestRally or 0,
+		Config.MatchResultsShortTeamSyncsLabel or Config.MatchResultsTeamSyncsLabel or "Syncs",
+		results.teamSyncs or 0,
+		Config.MatchResultsSlackSavesLabel or "Slack Saves",
+		results.slackSaves or 0,
+		suffix
+	)
+end
+
+local function setLobbyGuideStage(stage)
+	if lobbyReadyStatus.ready > 0 then
+		lobbyActiveStepLabel.Text = string.format("READY!  WAITING %d/%d", lobbyReadyStatus.ready, lobbyReadyStatus.needed)
+	elseif stage == 1 then
+		lobbyActiveStepLabel.Text = Config.LobbyGuideStepModeText or "1  CHOOSE MODE"
+	elseif stage == 2 then
+		lobbyActiveStepLabel.Text = Config.LobbyGuideStepThemeText or "2  PICK THEME"
+	elseif stage == 3 then
+		lobbyActiveStepLabel.Text = Config.LobbyGuideStepReadyText or "3  PRESS READY"
+	else
+		lobbyActiveStepLabel.Text = Config.LobbyGuideCompactText or "Mode. Theme. READY."
+	end
+end
+
+local function beginLobbyGuideOnce()
+	if lobbyGuideStarted then
+		return
+	end
+	lobbyGuideStarted = true
+	setLobbyGuideStage(1)
+	local stepSeconds = Config.LobbyGuideStepSeconds or 2.25
+	task.delay(stepSeconds, function()
+		setLobbyGuideStage(2)
+		task.delay(stepSeconds, function()
+			setLobbyGuideStage(3)
+			task.delay(stepSeconds, function()
+				lobbyGuideCompleted = true
+				setLobbyGuideStage(4)
+			end)
+		end)
+	end)
+end
+
+local function updateLobbyGuide(state, data)
+	local visible = state == "Lobby" or state == "WaitingForPlayers"
+	lobbyGuidePanel.Visible = visible
+	netGuideLabel.Visible = not visible
+	if not visible then
+		return
+	end
+
+	local message = tostring(data.message or "")
+	for _, entry in ipairs(Config.LobbyEntryPads or {}) do
+		local label = tostring(entry.Label or entry.Id or "")
+		if label ~= "" and string.find(message, label, 1, true) and string.find(message, "selected", 1, true) then
+			selectedModeLabel = label
+			break
+		end
+	end
+	local courtLabel = data.selectedCourtLabel or data.selectedCourtId or "Grass Court"
+	lobbyReadyStatus.ready = data.lobbyReadyPlayers or 0
+	lobbyReadyStatus.needed = data.lobbyNeededPlayers or data.playersNeeded or 1
+	lobbyModeSummaryLabel.Text = string.format(Config.LobbyModeSummaryFormat or "MODE: %s", selectedModeLabel)
+	lobbyThemeSummaryLabel.Text = string.format(Config.LobbyThemeSummaryFormat or "THEME: %s", tostring(courtLabel))
+	if lobbyGuideCompleted then
+		setLobbyGuideStage(4)
+	else
+		beginLobbyGuideOnce()
+	end
+end
+
+if MatchStateEvent then
 MatchStateEvent.OnClientEvent:Connect(function(data)
 	applyResponsiveLayout()
 	local redScore = data.redScore or 0
@@ -430,20 +1098,54 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 
 	local state = data.state or ""
 	local message = normalizeMessage(data.message)
+	setLobbyPlayerListVisible(state)
+	setMixerPanelsVisibleForState(state)
+	local dailyText = formatDailyBoostProgress()
+	updateLobbyGuide(state, data)
 
-	if state == "WaitingForPlayers" then
-		showOnboardingOnce()
+	if data.dailyBoostEarned == true then
+		setMessage(message ~= "" and message or (Config.DailyBoostEarnedMessage or "DAILY BOOST EARNED!"), 8)
+		subMessageHoldUntil = os.clock() + (Config.HudMessageDuration or 1.25)
+		subMessageLabel.Text = Config.DailyBoostEarnedSubMessage or "Nice teamwork. Queue another round!"
+		playGameSfx("Score")
+		return
+	end
+
+	if state == "Lobby" then
+		setMessage("LOBBY", 0)
+		netGuideLabel.Text = ""
+		local queued = data.queuedNextMatchPlayers or 0
+		if message == (Config.LateJoinSpectatorMessage or "NEXT MATCH QUEUE") then
+			subMessageLabel.Text = Config.LateJoinSpectatorSubMessage or "Queued for next match."
+		elseif queued > 0 then
+			subMessageLabel.Text = string.format("Next match queue: %d", queued)
+		else
+			subMessageLabel.Text = ""
+		end
+	elseif state == "WaitingForPlayers" then
 		setMessage("WAITING", 0)
-		if Config.CpuFillEnabled and cpuFillCount(data) > 0 then
+		netGuideLabel.Text = ""
+		local queued = data.queuedNextMatchPlayers or 0
+		if queued > 0 then
+			subMessageLabel.Text = string.format("%s  Next match queue %d", Config.LateJoinSpectatorSubMessage or "Queued for next match.", queued)
+		elseif Config.CpuFillEnabled and cpuFillCount(data) > 0 then
 			subMessageLabel.Text = Config.CpuFillMatchSubMessage or Config.WaitingSubMessage or message
 		elseif message ~= "" then
 			subMessageLabel.Text = Config.WaitingSubMessage or message
 		else
 			subMessageLabel.Text = Config.WaitingSubMessage or string.format("Red %d/2 - Blue %d/2", data.redPlayers or 0, data.bluePlayers or 0)
 		end
+		if dailyText ~= "" then
+			subMessageLabel.Text = subMessageLabel.Text .. "  " .. dailyText
+		end
 	elseif state == "Countdown" then
 		showOnboardingOnce()
 		setMessage(message ~= "" and message or "3", 20)
+		if message == (Config.StartMessage or "PINTO HARE!") then
+			playGameSfx("Start")
+		else
+			playGameSfx("Countdown")
+		end
 		if Config.CpuFillEnabled and cpuFillCount(data) > 0 then
 			subMessageLabel.Text = Config.CpuFillIntroText or Config.CpuFillMatchSubMessage or ""
 		else
@@ -457,9 +1159,21 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 		else
 			subMessageLabel.Text = Config.MatchReadySubMessage or ""
 		end
+		if dailyText ~= "" then
+			subMessageLabel.Text = subMessageLabel.Text .. "  " .. dailyText
+		end
 	elseif state == "Serving" then
 		setMessage(message, 0)
-		subMessageLabel.Text = Config.ServingSubMessage or "Track the ball!"
+		local servingTeam = data.servingTeam
+		if data.finalHare then
+			subMessageLabel.Text = Config.FinalHareSubMessage or "Next point wins."
+		elseif message == (Config.ServeChargeMessage or "FIBER CHARGE!") then
+			subMessageLabel.Text = Config.ServeChargeSubMessage or Config.ServingSubMessage or "Track the ball!"
+		elseif servingTeam then
+			subMessageLabel.Text = string.format(Config.ServeOwnerSubMessageFormat or "%s has serve. Hold PIN to charge.", tostring(servingTeam))
+		else
+			subMessageLabel.Text = Config.ServingSubMessage or "Track the ball!"
+		end
 	elseif state == "Rally" then
 		messageLabel.Text = ""
 		if os.clock() >= subMessageHoldUntil then
@@ -469,21 +1183,36 @@ MatchStateEvent.OnClientEvent:Connect(function(data)
 		setMessage(message, 4)
 		subMessageHoldUntil = 0
 		if string.find(message, "DROP!", 1, true) then
+			playGameSfx("Out")
 			subMessageLabel.Text = Config.FailSubtitleDropText or Config.PointSubMessage or "NEXT SERVE!"
 		elseif string.find(message, "OUT!", 1, true) then
+			playGameSfx("Out")
 			subMessageLabel.Text = Config.FailSubtitleOutText or Config.PointSubMessage or "NEXT SERVE!"
 		else
+			playGameSfx("Score")
 			subMessageLabel.Text = Config.PointSubMessage or "NEXT SERVE!"
 		end
 	elseif state == "GameOver" then
 		setMessage(message ~= "" and message or "GAME SET!", 4)
-		subMessageLabel.Text = Config.GameOverSubMessage or "NEXT MATCH INCOMING!"
+		subMessageLabel.Size = UDim2.fromScale(0.90, Config.GameOverResultsHeight or 0.120)
+		subMessageLabel.TextSize = isTouch and (Config.GameOverResultsTextSizeTouch or 16) or (Config.GameOverResultsTextSizeDesktop or 19)
+		subMessageLabel.Text = formatMatchResults(data.matchResults)
 	else
 		setMessage(message ~= "" and message or state, 0)
 		subMessageLabel.Text = ""
 	end
 end)
+end
 
-HitFxEvent.OnClientEvent:Connect(function(fxType, _position, teamName, rallyCount, comboCount)
-	showFloatingFx(fxType, teamName, rallyCount, comboCount)
-end)
+if MonetizationStateEvent then
+	MonetizationStateEvent.OnClientEvent:Connect(function(payload)
+		updateShop(payload or {})
+	end)
+end
+
+if HitFxEvent then
+	HitFxEvent.OnClientEvent:Connect(function(fxType, _position, teamName, rallyCount, comboCount, isFirstHare)
+		showFloatingFx(fxType, teamName, rallyCount, comboCount, isFirstHare)
+		playGameSfx(fxType)
+	end)
+end

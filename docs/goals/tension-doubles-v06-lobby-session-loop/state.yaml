@@ -1,0 +1,291 @@
+# Goal Maker v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Tension Doubles v0.6 Lobby & Session Loop"
+  slug: "tension-doubles-v06-lobby-session-loop"
+  kind: specific
+  tranche: "Discover the current lobby/session implementation, choose and execute the first safe verified slice toward a small Practice/Quick/Friends lobby with CPU fill, spectator space, participant counts, and post-match loop clarity."
+  status: done
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    reasoning_hint: medium
+    objective: "Map the current lobby, court selection, CPU fill, ready, spectator-adjacent, and post-match session-loop implementation against the requested v0.6 small lobby."
+    inputs:
+      - "README.md"
+      - "MANUAL_IMPORT.md"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "scripts/verify-lobby-ready.ps1"
+      - "scripts/verify-court-select.ps1"
+      - "scripts/verify-v06-guided-party.mjs"
+      - "docs/playtests"
+    constraints:
+      - "Read-only."
+      - "Do not edit implementation files."
+      - "Use concrete file-path evidence."
+      - "Separate already-implemented behavior from missing v0.6 lobby needs."
+      - "Keep v0.7 progress, v0.8 skins, v0.9 polish, and v1.0 launch work out of the first implementation slice unless they are only documented as deferred."
+    expected_output:
+      - "Current repo map for lobby/session loop"
+      - "Already-covered requirements"
+      - "Missing or weak requirements"
+      - "Verification commands and likely source-contract gaps"
+      - "Candidate bounded Worker tasks with allowed_files, verify, and stop_if"
+    receipt:
+      result: done
+      summary: "Current v0.6 already has server-local court selection, READY gating, CPU fill presets, selected-court votes, post-game lobby return, and source contracts. Missing or weak for the requested small lobby: explicit PRACTICE/QUICK 2v2/PRIVATE entrances, exact rule board copy, lobby participant count board, lobby spectator area, and Practice vs Bots entry semantics."
+      evidence:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "scripts/verify-lobby-ready.ps1"
+        - "scripts/verify-court-select.ps1"
+        - "scripts/verify-v06-guided-party.mjs"
+        - "README.md"
+      repo_map:
+        - "GameConfig.lua defines LivePreset Solo/TwoPlayer/FourPlayer, CPU fill, lobby copy, court selection copy, and post-match copy."
+        - "TDServer.server.lua creates Lobby and Courts folders, a CourtSelectBoard, court buttons, lobby ready state, selected-court votes, CPU partners, and teleports players back to lobby after game over."
+        - "TDInputClient.client.lua exposes READY via keyboard/gamepad and a visible button."
+        - "TDUIClient.client.lua renders Lobby, Waiting, Ready, Serving, Rally, PointScored, and GameOver HUD states with ready counts and CPU copy."
+        - "scripts/verify-lobby-ready.ps1, verify-court-select.ps1, and verify-v06-guided-party.mjs cover existing lobby/court/CPU behavior."
+      already_covered:
+        - "CPU fill exists through Config.CpuFillEnabled and ghost/CPU partner state."
+        - "Solo, 2-player, and 4-player presets exist, but they are global config presets rather than per-lobby entrance choices."
+        - "Court selection and READY already gate match start."
+        - "Post-match return to lobby exists via finishGame -> teleportPlayersToLobby -> resetLobbyReady/getLobbyGate."
+        - "3D arena builder has spectator platforms inside arena models, but not a clear lobby spectator area."
+      missing_or_weak:
+        - "No explicit PRACTICE / QUICK 2v2 / PRIVATE-FRIENDS lobby entrances or pads."
+        - "No exact rule board text: Move. Stretch. Hold PIN together."
+        - "No dedicated participant count board in the 3D lobby; counts are HUD-only."
+        - "No lobby spectator area/sign/pad."
+        - "No Practice vs Bots button independent of court selection."
+        - "Per-mode semantics are not implemented; LivePreset remains global."
+      verification_commands:
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+        - "node scripts\\verify-v06-guided-party.mjs"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+      candidate_worker_tasks:
+        - objective: "Add visible small-lobby affordances: PRACTICE/QUICK/PRIVATE entry pads, exact rule board, participant count board, spectator area, and source contract, reusing existing ready/court/CPU systems without per-mode matchmaking semantics yet."
+          allowed_files:
+            - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+            - "src/ServerScriptService/TDServer.server.lua"
+            - "scripts/verify-small-lobby.ps1"
+            - "README.md"
+            - "docs/playtests/v06-rc-checklist.md"
+          verify:
+            - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-small-lobby.ps1"
+            - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+            - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+            - "node scripts\\verify-v06-guided-party.mjs"
+            - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          stop_if:
+            - "Need full matchmaking or DataStore semantics."
+            - "Need Roblox Studio runtime control to verify layout placement."
+            - "Need files outside allowed_files."
+        - objective: "Implement per-mode session semantics for Practice/Quick/Friends using server-local lobby mode selection and CPU fill rules."
+          note: "Higher risk; defer until visible lobby affordances are in place."
+
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Choose the first safe v0.6 lobby implementation slice by player impact, confidence, reversibility, and verification strength."
+    inputs:
+      - "T001 receipt"
+      - "docs/goals/tension-doubles-v06-lobby-session-loop/goal.md"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Prefer a small slice that makes the lobby less confusing immediately."
+      - "Do not select full matchmaking, DataStore rankings, skins, monetization, or broad UI rewrites."
+      - "If evidence shows the repo is red or unstable, choose recovery or verification hardening first."
+    expected_output:
+      - "Decision"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred tasks"
+    receipt:
+      result: done
+      decision: "Do the visible small-lobby affordance slice first. It directly reduces first-time anxiety, is reversible, avoids full matchmaking/DataStore scope, and can be verified by source contracts plus Rojo build."
+      exact_worker_objective: "Add visible v0.6 small-lobby affordances: PRACTICE / QUICK 2v2 / PRIVATE-FRIENDS entry pads, exact rule board copy, participant count board, spectator area, and supporting copy, while reusing existing READY, court selection, CPU fill, and post-match systems."
+      allowed_files:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "scripts/verify-small-lobby.ps1"
+        - "README.md"
+        - "docs/playtests/v06-rc-checklist.md"
+      verify:
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-small-lobby.ps1"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+        - "node scripts\\verify-v06-guided-party.mjs"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+      stop_if:
+        - "Need full matchmaking, DataStore persistence, global queues, monetization, skins, or progress systems."
+        - "Need Roblox Studio runtime control to verify exact spatial placement."
+        - "Need files outside allowed_files."
+        - "Verification fails twice for the same reason."
+      deferred_tasks:
+        - "Per-mode session semantics beyond current ready/court/CPU systems."
+        - "Mid-match join queue and next-match assignment."
+        - "AFK handling, disconnect CPU takeover, team auto-balance, spectator UI."
+        - "v0.7 leaderstats for HAREs, Best Rally, Team Syncs."
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Add visible v0.6 small-lobby affordances: PRACTICE / QUICK 2v2 / PRIVATE-FRIENDS entry pads, exact rule board copy, participant count board, spectator area, and supporting copy, while reusing existing READY, court selection, CPU fill, and post-match systems."
+    allowed_files:
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "scripts/verify-small-lobby.ps1"
+      - "README.md"
+      - "docs/playtests/v06-rc-checklist.md"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-small-lobby.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+      - "node scripts\\verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Behavior or product direction is ambiguous."
+      - "Verification fails twice for the same reason."
+      - "The selected task requires Roblox services, credentials, or unavailable Studio runtime control."
+      - "The implementation would expand into full matchmaking, persistence, monetization, skins, or unrelated progress systems."
+      - "Need full matchmaking, DataStore persistence, global queues, monetization, skins, or progress systems."
+      - "Need Roblox Studio runtime control to verify exact spatial placement."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "scripts/verify-small-lobby.ps1"
+        - "README.md"
+        - "docs/playtests/v06-rc-checklist.md"
+      summary: "Added a visible v0.6 small lobby surface: PRACTICE / QUICK 2v2 / PRIVATE-FRIENDS entry pads with touch/click/prompt joins, exact rule board text, physical participant count board, spectator area, and docs/playtest coverage. Entry pads select a safe existing court and reuse current READY, CPU fill, court vote, and post-match lobby-return systems instead of adding full matchmaking."
+      commands:
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-small-lobby.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+          status: pass
+        - cmd: "node scripts\\verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+        - cmd: "git diff --check -- src\\ReplicatedStorage\\TDShared\\GameConfig.lua src\\ServerScriptService\\TDServer.server.lua scripts\\verify-small-lobby.ps1 README.md docs\\playtests\\v06-rc-checklist.md"
+          status: pass
+
+  - id: T004
+    type: scout
+    assignee: Scout
+    status: queued
+    reasoning_hint: medium
+    objective: "Map v0.7 progress-lite opportunities after the v0.6 lobby slice has evidence, focusing on leaderstats-safe Wins, HAREs, Best Rally, and Team Syncs."
+    inputs:
+      - "T001 receipt"
+      - "T003 receipt, if available"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "README.md"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Do not choose DataStore or global leaderboard work for v0.6."
+      - "Only produce a future-task recommendation if v0.6 lobby work is not blocked."
+    expected_output:
+      - "Progress-lite metric map"
+      - "What can be leaderstats-only"
+      - "What should wait for Ordered DataStore"
+      - "Candidate future Worker tasks"
+    receipt: null
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the current tranche satisfies the v0.6 small-lobby/session-loop outcome."
+    inputs:
+      - "All done task receipts"
+      - "Last verification"
+      - "Current dirty diff"
+      - "docs/goals/tension-doubles-v06-lobby-session-loop/goal.md"
+    constraints:
+      - "Read-only."
+      - "Do not implement."
+      - "Reject completion if required Worker work is still queued or active."
+      - "Map completion to the requested Practice / Quick 2v2 / Friends, CPU fill, spectator, participant count, rule board, and post-match loop outcomes."
+    expected_output:
+      - "complete | not_complete"
+      - "missing evidence"
+      - "mapping to v0.6 lobby/session-loop requirements"
+      - "next task if not complete"
+    receipt:
+      result: done
+      decision: "complete"
+      summary: "The first safe verified implementation slice for v0.6 small lobby/session clarity is complete. The repo now has visible PRACTICE, QUICK 2v2, and PRIVATE / FRIENDS lobby entry pads, exact rule-board copy, a physical participant count board, a readable spectator area, and a Practice vs Bots path that reuses current READY and CPU fill. Post-match lobby return and replay gating were already present and remain verified."
+      mapping:
+        - "PRACTICE / 1P + CPU: Config.LobbyEntryPads includes Practice with 1P + CPU copy; PracticeEntryPad selects the existing Grass path and READY can start Solo CPU-fill."
+        - "QUICK 2v2 / Players + CPU fill: Quick2v2EntryPad is visible and joins the same server-local ready path with CPU fill available by current LivePreset."
+        - "PRIVATE / FRIENDS: PrivateFriendsEntryPad is visible and supports same-server friends joining before READY; full invite/private matchmaking is explicitly out of this tranche."
+        - "Rule board: LobbyRulesBoard uses exact text Move. Stretch. Hold PIN together."
+        - "Participant count: LobbyParticipantBoard updates from getLobbyReadyCount when players join, leave, select entries, or ready."
+        - "Spectator area: LobbySpectatorArea and spectator copy are created in the lobby."
+        - "Session loop: finishGame still returns players to lobby, resets ready state, and allows the existing restart gate."
+      verification:
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-small-lobby.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1: pass"
+        - "node scripts\\verify-v06-guided-party.mjs: pass"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx: pass"
+        - "git diff --check on T003 allowed files: pass"
+      deferred:
+        - "Full matchmaking, private invite flow, mid-match join queue, AFK handling, disconnect CPU takeover, and v0.7 progress-lite leaderstats are future tranches."
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: pass
+    task: T003
+    commands:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-small-lobby.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+      - "node scripts\\verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"

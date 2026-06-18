@@ -1,0 +1,214 @@
+# Goal Maker v2 state.yaml
+# Board truth lives here. goal.md is the editable charter; notes/ holds long receipts only.
+
+version: 2
+
+goal:
+  title: "Tension Doubles v0.6 RC Lock"
+  slug: "tension-doubles-v06-rc-lock"
+  kind: audit
+  tranche: "Audit current RC evidence, implement the first safe local hardening slice, verify the full loop, and leave only explicit owner-run device evidence if it cannot be completed locally."
+  status: blocked
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    reasoning_hint: medium
+    objective: "Map v0.6 RC evidence and gaps across mobile layout, preset behavior, replay flow, session audio, Output health, and existing checklists."
+    inputs:
+      - "tention.md"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDInputClient.client.lua"
+      - "docs/playtests/v06-rc-checklist.md"
+      - "docs/playtests/v10-public-beta-checklist.md"
+      - "scripts/verify-*.ps1"
+    constraints:
+      - "Read-only."
+      - "Do not edit implementation or checklist files."
+      - "Distinguish automated evidence, Studio evidence, and owner-run real-device evidence."
+      - "Do not promote v0.7 feature ideas into v0.6 RC scope."
+    expected_output:
+      - "RC evidence matrix"
+      - "Exact missing or stale evidence"
+      - "Ranked local hardening candidates"
+      - "Smallest real-phone manual test candidate"
+      - "Candidate next tasks"
+    receipt:
+      result: done
+      summary: "v0.6 has strong automated and Studio evidence; remaining RC evidence is real-phone layout plus one continuous results-to-rematch pass. Practice Wall, Match Results, and light local records already exist for v0.7; FIRST HARE celebration is the clearest missing v0.7 slice."
+      evidence:
+        - "scripts/verify-live-preset.ps1 covers Solo, TwoPlayer, and FourPlayer configuration contracts."
+        - "scripts/verify-lobby-ui-hierarchy.ps1 covers lobby hierarchy, short device hints, audio placement, and match hiding."
+        - "scripts/verify-practice-wall.ps1, scripts/verify-match-results.ps1, scripts/verify-progress-lite.ps1, and scripts/verify-progress-titles.ps1 pass."
+        - "Studio baseline reached READY -> FIBER CHARGE with no game-script errors."
+        - "docs/playtests/v06-rc-checklist.md has broad mobile checks but no smallest one-session RC script or explicit results-to-rematch sequence."
+      gaps:
+        - "Real-phone landscape safe-area and tap/readability evidence must be supplied by the owner."
+        - "TwoPlayer and FourPlayer still need live multi-client confirmation even though source contracts pass."
+        - "Results -> lobby return -> READY -> next match is not stated as one compact acceptance flow."
+        - "FIRST HARE has analytics tracking but no first-time-only player-facing celebration."
+      ranked_candidates:
+        - "Strengthen the v0.6 RC checklist and verifier around one-session mobile/preset/audio/rematch evidence."
+        - "Add a bounded FIRST HARE celebration as the first v0.7 Worker slice after RC documentation hardening."
+
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Choose the first safe v0.6 RC hardening task using impact, confidence, reversibility, and verification strength."
+    inputs:
+      - "T001 receipt"
+      - "Current dirty diff"
+      - "Fresh verification status"
+    constraints:
+      - "Do not implement."
+      - "Prefer a bounded RC verification or replay-safety improvement over a new feature."
+      - "Do not select work requiring real-device claims that cannot be produced locally."
+    expected_output:
+      - "Decision"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred v0.7 items"
+    receipt:
+      result: done
+      decision: "Do v0.6 RC checklist hardening first. Existing gameplay surfaces are already implemented; the highest-confidence reversible improvement is one minimal acceptance script plus a verifier that prevents preset, mobile, audio, and rematch coverage from drifting."
+      next_allowed_task: T003
+      worker_objective: "Add a compact v0.6 RC Lock acceptance section and source contract covering real-phone landscape, all three presets, independent session audio, results-to-rematch, and clean Output."
+      allowed_files:
+        - "docs/playtests/v06-rc-checklist.md"
+        - "scripts/verify-v06-rc-lock.ps1"
+      verify:
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-v06-rc-lock.ps1"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-live-preset.ps1"
+        - "node scripts/verify-v06-guided-party.mjs"
+      stop_if:
+        - "Implementation code must change."
+        - "A real-phone pass would need to be claimed without owner evidence."
+        - "Existing v0.6 acceptance criteria conflict with the compact script."
+      deferred_v07:
+        - "FIRST HARE celebration becomes the next implementation slice after local RC hardening."
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: low
+    objective: "Add a compact v0.6 RC Lock acceptance section and source contract covering real-phone landscape, all three presets, independent session audio, results-to-rematch, and clean Output."
+    allowed_files:
+      - "docs/playtests/v06-rc-checklist.md"
+      - "scripts/verify-v06-rc-lock.ps1"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-v06-rc-lock.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-live-preset.ps1"
+      - "node scripts/verify-v06-guided-party.mjs"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Behavior or RC acceptance criteria are ambiguous."
+      - "Verification fails twice for the same reason."
+      - "Work would add a v0.7 feature or alter protected gameplay behavior."
+    receipt:
+      result: done
+      changed_files:
+        - "docs/playtests/v06-rc-checklist.md"
+        - "scripts/verify-v06-rc-lock.ps1"
+      commands:
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-v06-rc-lock.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-live-preset.ps1"
+          status: pass
+        - cmd: "node scripts/verify-v06-guided-party.mjs"
+          status: pass
+      summary: "Added one owner-run RC Lock script for real-phone landscape, three presets, independent session audio, results-to-rematch, and clean Output; added a source contract that keeps all gates present."
+
+  - id: T004
+    type: pm
+    assignee: PM
+    status: done
+    reasoning_hint: medium
+    objective: "Consolidate verified automated and Studio evidence into the smallest owner-run mobile, preset, audio, and replay acceptance script."
+    inputs:
+      - "T001 receipt"
+      - "T002 decision"
+      - "T003 receipt"
+      - "docs/playtests/v06-rc-checklist.md"
+    constraints:
+      - "Control-file or checklist documentation edits only unless a Worker task explicitly allows more."
+      - "Do not claim real-phone success without owner evidence."
+      - "Keep the remaining manual script minimal and executable in one focused session."
+    expected_output:
+      - "Minimal manual RC script"
+      - "Automated evidence already covered"
+      - "Owner evidence still required"
+    receipt:
+      result: done
+      summary: "The smallest remaining owner run is consolidated under 'v0.6 RC Lock: Smallest Owner Run'; automated evidence is separated from real-phone and multi-client evidence, and no real-device pass is claimed."
+      owner_evidence_required:
+        - "Real phone landscape lobby safe-area and tap/readability pass."
+        - "TwoPlayer two-client CPU-fill pass."
+        - "FourPlayer four-client no-CPU/no-ghost pass."
+        - "One complete results -> lobby -> READY -> FIBER CHARGE replay pass."
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether v0.6 RC Lock is complete or name the exact remaining blocker."
+    inputs:
+      - "All done task receipts"
+      - "Last verification"
+      - "Current dirty diff"
+      - "Owner-run device evidence when available"
+    constraints:
+      - "Do not implement."
+      - "Reject RC completion if a required Worker remains queued or active."
+      - "Reject real-device coverage claims without owner evidence."
+    expected_output:
+      - "complete | not_complete"
+      - "Evidence mapped to each RC criterion"
+      - "Missing evidence"
+      - "Exact next task if not complete"
+    receipt:
+      result: done
+      decision: not_complete
+      summary: "Local RC hardening is complete and verified, but v0.6 cannot be called RC locked until owner-run real-phone and multi-client evidence is recorded."
+      complete_local_scope: true
+      missing_evidence:
+        - "Real phone landscape lobby safe-area and tap/readability pass."
+        - "TwoPlayer two-client CPU-fill pass."
+        - "FourPlayer four-client no-CPU/no-ghost pass."
+        - "One complete results -> lobby -> READY -> FIBER CHARGE replay pass."
+      next_task: "Owner runs docs/playtests/v06-rc-checklist.md section 'v0.6 RC Lock: Smallest Owner Run' and reports pass/fail evidence."
+
+checks:
+  dirty_fingerprint: "broad pre-existing dirty worktree; preserve all unrelated changes"
+  last_verification:
+    result: pass
+    task: T003
+    commands:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-v06-rc-lock.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-live-preset.ps1"
+      - "node scripts/verify-v06-guided-party.mjs"

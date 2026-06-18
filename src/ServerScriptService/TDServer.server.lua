@@ -3,8 +3,10 @@
 -- scripted ball movement, virtual-net hit detection, scoring, match loop, and Onboarding & Feel FX.
 
 local Players = game:GetService("Players")
+local MarketplaceService = game:GetService("MarketplaceService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
+local ServerStorage = game:GetService("ServerStorage")
 local TeamsService = game:GetService("Teams")
 local TweenService = game:GetService("TweenService")
 local Debris = game:GetService("Debris")
@@ -29,8 +31,11 @@ local function getOrCreateRemote(name)
 end
 
 local PinInputEvent = getOrCreateRemote("PinInputEvent")
+local LobbyReadyEvent = getOrCreateRemote("LobbyReadyEvent")
 local MatchStateEvent = getOrCreateRemote("MatchStateEvent")
 local HitFxEvent = getOrCreateRemote("HitFxEvent")
+local MonetizationRequestEvent = getOrCreateRemote("MonetizationRequestEvent")
+local MonetizationStateEvent = getOrCreateRemote("MonetizationStateEvent")
 
 local CourtFolder = workspace:FindFirstChild("TDCourt") or Instance.new("Folder")
 CourtFolder.Name = "TDCourt"
@@ -44,18 +49,50 @@ local SpawnFolder = CourtFolder:FindFirstChild("SpawnPoints") or Instance.new("F
 SpawnFolder.Name = "SpawnPoints"
 SpawnFolder.Parent = CourtFolder
 
+local LobbyFolder = workspace:FindFirstChild("Lobby") or Instance.new("Folder")
+LobbyFolder.Name = "Lobby"
+LobbyFolder.Parent = workspace
+
+local CourtsFolder = workspace:FindFirstChild("Courts") or Instance.new("Folder")
+CourtsFolder.Name = "Courts"
+CourtsFolder.Parent = workspace
+
 local playerState = {}
+local selectedCourtByPlayer = {}
+local courtSelectionOrder = {}
+local courtButtonLabels = {}
+local courtButtons = {}
+local lobbyParticipantLabel = nil
+local activeCourtId = "Grass"
+local activeCourtOrigin = Vector3.new(0, 0, 0)
 local score = { Red = 0, Blue = 0 }
+local matchStats = {
+	Hares = 0,
+	BestRally = 0,
+	TeamSyncs = 0,
+	SlackSaves = 0,
+}
 local lastTeamHitTime = { Red = -math.huge, Blue = -math.huge }
 local currentState = "WaitingForPlayers"
 local matchRunning = false
 local roundActive = false
 local lastPointLoser = "Blue"
 local winningTeam = nil
+local currentServingTeam = nil
 local rallyHitCount = 0
 local hareCombo = { Red = 0, Blue = 0 }
 local lastHareTime = { Red = -math.huge, Blue = -math.huge }
 local lastGuidanceBroadcast = 0
+local lobbyReady = {}
+local queuedNextMatchPlayers = {}
+local lastPlayerActivityAt = {}
+local monetizationOwnership = {}
+local dailyBoostClaimed = {}
+local Monetization = {}
+local PracticeWall = {}
+local Analytics = {}
+local Diagnostics = {}
+local MatchLoop = {}
 
 local teamBeams = {}
 local pinIndicators = {}
@@ -108,9 +145,359 @@ local function totalHalfDepth()
 	return Config.CourtDepth + Config.OutZoneDepth
 end
 
+local function getCourtArenaConfig(courtId)
+	local arenas = Config.CourtArenaModels or {}
+	local arenaConfig = arenas[courtId]
+	if arenaConfig then
+		return arenaConfig
+	end
+
+	local grassArena = Config.GrassTileArena or {}
+	if courtId == (grassArena.CourtId or "Grass") then
+		return grassArena
+	end
+	return nil
+end
+
+local function shouldUseCourtArena()
+	local arenaConfig = getCourtArenaConfig(activeCourtId)
+	return matchRunning and arenaConfig and arenaConfig.Enabled == true
+end
+
+local function activeHalfDepth()
+	if shouldUseCourtArena() then
+		local arenaSize = getCourtArenaConfig(activeCourtId).SizeStuds or 64
+		return math.min(totalHalfDepth(), arenaSize / 2)
+	end
+	return totalHalfDepth()
+end
+
+local function courtPosition(x, y, z)
+	return Vector3.new(activeCourtOrigin.X + x, y, activeCourtOrigin.Z + z)
+end
+
 local teamCount
 local getNetGuidanceForTeam
 local isBallOutsideArena
+local startMatchIfPossible
+local getAliveRoot
+local setLobbyReady
+local getSelectedMatchCourt
+local getCourtVoteSummary
+local getCourtAvailabilitySummary
+
+local function requiredPlayerCount()
+	if Config.AllowGhostPartners then
+		return Config.MinPlayersToAutoStart
+	end
+	return 4
+end
+
+local function isLobbyParticipant(player)
+	return player.Parent == Players and queuedNextMatchPlayers[player] ~= true
+end
+
+local function getLobbyReadyCount()
+	local readyCount = 0
+	local activeCount = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		if isLobbyParticipant(player) then
+			activeCount += 1
+			if lobbyReady[player] == true then
+				readyCount += 1
+			end
+		end
+	end
+	return readyCount, activeCount
+end
+
+local function getQueuedNextMatchCount()
+	local count = 0
+	for player in pairs(queuedNextMatchPlayers) do
+		if player.Parent == Players then
+			count += 1
+		end
+	end
+	return count
+end
+
+Diagnostics.folder = nil
+
+Diagnostics.isEnabled = function()
+	return Config.StudioDiagnosticsEnabled ~= false and RunService:IsStudio()
+end
+
+Diagnostics.ensureFolder = function()
+	if not Diagnostics.isEnabled() then
+		if Diagnostics.folder and Diagnostics.folder.Parent then
+			Diagnostics.folder:Destroy()
+		end
+		Diagnostics.folder = nil
+		return nil
+	end
+
+	local folder = Diagnostics.folder
+	if not folder or not folder.Parent then
+		folder = ReplicatedStorage:FindFirstChild(Config.StudioDiagnosticsFolderName or "TensionDoublesStudioDiagnostics")
+		if not folder then
+			folder = Instance.new("Folder")
+			folder.Name = Config.StudioDiagnosticsFolderName or "TensionDoublesStudioDiagnostics"
+			folder.Parent = ReplicatedStorage
+		end
+		folder:SetAttribute("StudioOnly", true)
+		folder:SetAttribute("DisableWith", "StudioDiagnosticsEnabled")
+		Diagnostics.folder = folder
+	end
+	return folder
+end
+
+Diagnostics.ensureSubfolder = function(name)
+	local folder = Diagnostics.ensureFolder()
+	if not folder then
+		return nil
+	end
+
+	local subfolder = folder:FindFirstChild(name)
+	if subfolder and not subfolder:IsA("Folder") then
+		subfolder:Destroy()
+		subfolder = nil
+	end
+	if not subfolder then
+		subfolder = Instance.new("Folder")
+		subfolder.Name = name
+		subfolder.Parent = folder
+	end
+	return subfolder
+end
+
+Diagnostics.ensureValue = function(name, className, parent)
+	local container = parent or Diagnostics.ensureFolder()
+	if not container then
+		return nil
+	end
+
+	local value = container:FindFirstChild(name)
+	if value and value.ClassName ~= className then
+		value:Destroy()
+		value = nil
+	end
+	if not value then
+		value = Instance.new(className)
+		value.Name = name
+		value.Parent = container
+	end
+	return value
+end
+
+Diagnostics.setString = function(name, value)
+	local stringValue = Diagnostics.ensureValue(name, "StringValue")
+	if stringValue then
+		stringValue.Value = tostring(value or "")
+	end
+end
+
+Diagnostics.setInt = function(name, value)
+	local intValue = Diagnostics.ensureValue(name, "IntValue")
+	if intValue then
+		intValue.Value = math.max(0, math.floor(tonumber(value) or 0))
+	end
+end
+
+Diagnostics.setBool = function(name, value)
+	local boolValue = Diagnostics.ensureValue(name, "BoolValue")
+	if boolValue then
+		boolValue.Value = value == true
+	end
+end
+
+Diagnostics.syncAnalyticsCounters = function()
+	local countersFolder = Diagnostics.ensureSubfolder("AnalyticsCounters")
+	if not countersFolder then
+		return
+	end
+
+	local analyticsFolder = ReplicatedStorage:FindFirstChild(Config.AnalyticsLiteFolderName or "TensionDoublesAnalytics")
+	for eventKey, eventName in pairs(Config.AnalyticsLiteEvents or {}) do
+		local counterName = eventName or eventKey
+		local sourceCounter = analyticsFolder and analyticsFolder:FindFirstChild(counterName)
+		local count = 0
+		if sourceCounter and sourceCounter:IsA("IntValue") then
+			count = sourceCounter.Value
+		end
+		local mirrorCounter = Diagnostics.ensureValue(counterName, "IntValue", countersFolder)
+		if mirrorCounter then
+			mirrorCounter.Value = count
+		end
+	end
+end
+
+Diagnostics.update = function(message, readyCount, neededCount)
+	if not Diagnostics.isEnabled() then
+		return
+	end
+
+	Diagnostics.setString("LivePreset", Config.ActiveLivePreset or Config.LivePreset or "")
+	Diagnostics.setString("State", currentState)
+	Diagnostics.setString("LastMessage", message or "")
+	Diagnostics.setInt("QueuedSpectators", getQueuedNextMatchCount())
+	Diagnostics.setInt("LobbyReadyPlayers", readyCount or 0)
+	Diagnostics.setInt("LobbyNeededPlayers", neededCount or 0)
+	Diagnostics.setBool("MatchRunning", matchRunning)
+	Diagnostics.syncAnalyticsCounters()
+end
+
+Analytics.folder = nil
+Analytics.initialized = false
+Analytics.playerFlags = {}
+
+Analytics.eventName = function(eventKey)
+	local events = Config.AnalyticsLiteEvents or {}
+	return events[eventKey] or eventKey
+end
+
+Analytics.ensureCounter = function(folder, eventKey)
+	local eventName = Analytics.eventName(eventKey)
+	local counter = folder:FindFirstChild(eventName)
+	if not counter then
+		counter = Instance.new("IntValue")
+		counter.Name = eventName
+		counter.Parent = folder
+	end
+	if not Analytics.initialized then
+		counter.Value = 0
+	end
+	return counter
+end
+
+Analytics.ensureFolder = function()
+	if Config.AnalyticsLiteEnabled == false then
+		return nil
+	end
+	local folder = Analytics.folder
+	if not folder or not folder.Parent then
+		folder = ReplicatedStorage:FindFirstChild(Config.AnalyticsLiteFolderName or "TensionDoublesAnalytics")
+		if not folder then
+			folder = Instance.new("Folder")
+			folder.Name = Config.AnalyticsLiteFolderName or "TensionDoublesAnalytics"
+			folder.Parent = ReplicatedStorage
+		end
+		Analytics.folder = folder
+	end
+	for eventKey in pairs(Config.AnalyticsLiteEvents or {}) do
+		Analytics.ensureCounter(folder, eventKey)
+	end
+	Analytics.initialized = true
+	return folder
+end
+
+Analytics.record = function(eventKey, amount)
+	local folder = Analytics.ensureFolder()
+	if not folder then
+		return
+	end
+	local counter = Analytics.ensureCounter(folder, eventKey)
+	local increment = amount or 1
+	counter.Value += increment
+	folder:SetAttribute("LastEvent", counter.Name)
+	folder:SetAttribute("LastEventAt", os.clock())
+	Diagnostics.syncAnalyticsCounters()
+	if Config.AnalyticsLitePrintEnabled == true then
+		print(string.format("[TD Analytics] %s=%d", counter.Name, counter.Value))
+	end
+end
+
+Analytics.recordForPlayer = function(player, eventKey)
+	if not player then
+		return
+	end
+	local flags = Analytics.playerFlags[player]
+	if not flags then
+		flags = {}
+		Analytics.playerFlags[player] = flags
+	end
+	if flags[eventKey] == true then
+		return
+	end
+	flags[eventKey] = true
+	Analytics.record(eventKey)
+end
+
+Analytics.recordForTeamPlayers = function(teamName, eventKey)
+	for _, player in ipairs(Players:GetPlayers()) do
+		if player.Team and player.Team.Name == teamName then
+			Analytics.recordForPlayer(player, eventKey)
+		end
+	end
+end
+
+local function markPlayerActivity(player)
+	lastPlayerActivityAt[player] = os.clock()
+end
+
+local function allLobbyPlayersReady()
+	if Config.LobbyReadyEnabled == false then
+		return true
+	end
+	local players = Players:GetPlayers()
+	local hasLobbyParticipant = false
+	for _, player in ipairs(players) do
+		if isLobbyParticipant(player) then
+			hasLobbyParticipant = true
+		elseif queuedNextMatchPlayers[player] == true then
+			lobbyReady[player] = false
+		end
+		if isLobbyParticipant(player) and lobbyReady[player] ~= true then
+			return false
+		end
+	end
+	return hasLobbyParticipant
+end
+
+local function isFinalHareActive()
+	return Config.FinalHareEnabled ~= false
+		and score.Red == Config.ScoreToWin - 1
+		and score.Blue == Config.ScoreToWin - 1
+end
+
+local function formatServeOwnerMessage(teamName)
+	local displayTeam = string.upper(teamName)
+	if isFinalHareActive() then
+		return string.format(Config.FinalHareServeMessageFormat or "%s FINAL SERVE", displayTeam)
+	end
+	return string.format(Config.ServeOwnerMessageFormat or "%s SERVES", displayTeam)
+end
+
+local function resetMatchStats()
+	matchStats.Hares = 0
+	matchStats.BestRally = 0
+	matchStats.TeamSyncs = 0
+	matchStats.SlackSaves = 0
+end
+
+local function getMatchResultsPayload()
+	if Config.MatchResultsEnabled == false then
+		return nil
+	end
+	return {
+		hares = matchStats.Hares,
+		bestRally = matchStats.BestRally,
+		teamSyncs = matchStats.TeamSyncs,
+		slackSaves = matchStats.SlackSaves,
+	}
+end
+
+local function recordMatchRallyResult(rallyCount)
+	matchStats.BestRally = math.max(matchStats.BestRally, rallyCount or 0)
+end
+
+local function recordMatchHitResult(fxType)
+	if fxType == "Hare" then
+		matchStats.Hares += 1
+		matchStats.TeamSyncs += 1
+	elseif fxType == "Slack" then
+		matchStats.SlackSaves += 1
+	end
+end
 
 local function broadcastState(message)
 	local netGuidance = nil
@@ -120,6 +507,11 @@ local function broadcastState(message)
 			Blue = getNetGuidanceForTeam("Blue"),
 		}
 	end
+	local readyCount, activeCount = getLobbyReadyCount()
+	local neededCount = math.max(requiredPlayerCount(), activeCount)
+	local selectedCourt, voteCounts, selectedVotes, totalVotes = getCourtVoteSummary()
+	local availability = getCourtAvailabilitySummary()
+	Diagnostics.update(message, readyCount, neededCount)
 
 	MatchStateEvent:FireAllClients({
 		state = currentState,
@@ -127,9 +519,24 @@ local function broadcastState(message)
 		blueScore = score.Blue,
 		message = message or "",
 		winner = winningTeam,
+		matchResults = getMatchResultsPayload(),
+		servingTeam = currentServingTeam,
+		finalHare = isFinalHareActive(),
 		redPlayers = teamCount("Red"),
 		bluePlayers = teamCount("Blue"),
 		playersNeeded = Config.AllowGhostPartners and Config.MinPlayersToAutoStart or 4,
+		lobbyReadyPlayers = readyCount,
+		lobbyNeededPlayers = neededCount,
+		queuedNextMatchPlayers = getQueuedNextMatchCount(),
+		selectedCourtId = selectedCourt and selectedCourt.Id or activeCourtId,
+		selectedCourtLabel = selectedCourt and selectedCourt.Label or activeCourtId,
+		courtOriginX = activeCourtOrigin.X,
+		courtOriginZ = activeCourtOrigin.Z,
+		courtVoteCounts = voteCounts,
+		courtAvailability = availability,
+		selectedCourtVotes = selectedVotes,
+		totalCourtVotes = totalVotes,
+		livePreset = Config.ActiveLivePreset or Config.LivePreset,
 		cpuPlayers = {
 			Red = countActiveCpuPartners("Red"),
 			Blue = countActiveCpuPartners("Blue"),
@@ -150,7 +557,7 @@ local function makePart(name, size, position, color, material, parent)
 	part.Anchored = true
 	part.CanCollide = true
 	part.Size = size
-	part.Position = position
+	part.Position = courtPosition(position.X, position.Y, position.Z)
 	part.Color = color
 	part.Material = material or Enum.Material.SmoothPlastic
 	part.TopSurface = Enum.SurfaceType.Smooth
@@ -168,10 +575,10 @@ local function makeNonCollidePart(name, size, position, color, material, parent)
 	return part
 end
 
-local function addSurfaceText(part, text, color)
+local function addSurfaceText(part, text, color, face)
 	local gui = Instance.new("SurfaceGui")
 	gui.Name = "TD_Label"
-	gui.Face = Enum.NormalId.Front
+	gui.Face = face or Enum.NormalId.Front
 	gui.LightInfluence = 0
 	gui.SizingMode = Enum.SurfaceGuiSizingMode.PixelsPerStud
 	gui.PixelsPerStud = 40
@@ -213,7 +620,7 @@ local function createSpawn(name, pos)
 	spawn.CanCollide = false
 	spawn.Transparency = 1
 	spawn.Size = Vector3.new(2, 1, 2)
-	spawn.Position = pos
+	spawn.Position = courtPosition(pos.X, pos.Y, pos.Z)
 	spawn.Parent = SpawnFolder
 	return spawn
 end
@@ -227,6 +634,685 @@ local function createFlag(teamName, x, z)
 	flag:SetAttribute("BaseColorB", color.B)
 	addSurfaceText(flag, string.upper(teamName), Color3.fromRGB(255, 255, 255))
 	return pole, flag
+end
+
+local function clearFolder(folder)
+	for _, child in ipairs(folder:GetChildren()) do
+		child:Destroy()
+	end
+end
+
+local function makeWorldPart(parent, name, size, cframe, color, material, collidable)
+	local part = Instance.new("Part")
+	part.Name = name
+	part.Anchored = true
+	part.CanCollide = collidable == true
+	part.CanTouch = collidable == true
+	part.CanQuery = true
+	part.Size = size
+	part.CFrame = cframe
+	part.Color = color
+	part.Material = material or Enum.Material.SmoothPlastic
+	part.TopSurface = Enum.SurfaceType.Smooth
+	part.BottomSurface = Enum.SurfaceType.Smooth
+	part.Parent = parent
+	return part
+end
+
+local function addBillboardText(parent, text, size, studsOffset, alwaysOnTop, maxDistance)
+	local gui = Instance.new("BillboardGui")
+	gui.Name = "Label"
+	gui.AlwaysOnTop = alwaysOnTop == true
+	gui.Size = UDim2.fromOffset(size.X, size.Y)
+	gui.StudsOffset = studsOffset or Vector3.new(0, 3.2, 0)
+	gui.MaxDistance = maxDistance or 80
+	gui.Parent = parent
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
+	label.BackgroundTransparency = 0.18
+	label.Text = text
+	label.TextColor3 = Color3.fromRGB(255, 255, 255)
+	label.TextScaled = true
+	label.TextWrapped = true
+	label.Font = Enum.Font.GothamBlack
+	label.Parent = gui
+
+	return gui, label
+end
+
+local function addLobbyTutorialBoard(parent, lobbySpawnPos)
+	local boardPosition = lobbySpawnPos + Vector3.new(
+		Config.LobbyTutorialBoardXOffset or -27,
+		6.2,
+		Config.LobbyTutorialBoardZOffset or 6
+	)
+	local board = makeWorldPart(
+		parent,
+		"LobbyHowToPlayBoard",
+		Vector3.new(28, 12.5, 0.8),
+		CFrame.new(boardPosition),
+		Color3.fromRGB(10, 18, 34),
+		Enum.Material.Metal,
+		false
+	)
+	board.CanCollide = false
+	board.CanTouch = false
+
+	local gui = Instance.new("SurfaceGui")
+	gui.Name = "HowToPlaySurface"
+	gui.Face = Enum.NormalId.Front
+	gui.LightInfluence = 0
+	gui.SizingMode = Enum.SurfaceGuiSizingMode.FixedSize
+	gui.CanvasSize = Vector2.new(1120, 500)
+	gui.Parent = board
+
+	local background = Instance.new("Frame")
+	background.Name = "BoardLayout"
+	background.Size = UDim2.fromScale(1, 1)
+	background.BackgroundColor3 = Color3.fromRGB(8, 17, 34)
+	background.BorderSizePixel = 0
+	background.Parent = gui
+
+	local title = Instance.new("TextLabel")
+	title.Name = "Title"
+	title.Position = UDim2.fromScale(0.03, 0.025)
+	title.Size = UDim2.fromScale(0.94, 0.19)
+	title.BackgroundTransparency = 1
+	title.Font = Enum.Font.GothamBlack
+	title.Text = Config.LobbyTutorialBoardTitle or "HOW TO PLAY"
+	title.TextColor3 = Color3.fromRGB(255, 255, 255)
+	title.TextScaled = true
+	title.Parent = background
+
+	local subtitle = Instance.new("TextLabel")
+	subtitle.Name = "Subtitle"
+	subtitle.Position = UDim2.fromScale(0.18, 0.205)
+	subtitle.Size = UDim2.fromScale(0.64, 0.11)
+	subtitle.BackgroundColor3 = Color3.fromRGB(255, 215, 54)
+	subtitle.BorderSizePixel = 0
+	subtitle.Font = Enum.Font.GothamBlack
+	subtitle.Text = Config.LobbyTutorialBoardSubtitle or "TENSION DOUBLES: PINTO HARE!"
+	subtitle.TextColor3 = Color3.fromRGB(22, 20, 16)
+	subtitle.TextScaled = true
+	subtitle.Parent = background
+
+	local steps = {
+		{ name = "MoveTogether", text = Config.LobbyTutorialStepMove or "1  MOVE WITH YOUR PARTNER", color = Color3.fromRGB(214, 58, 62) },
+		{ name = "StretchFiber", text = Config.LobbyTutorialStepStretch or "2  STRETCH THE FIBER", color = Color3.fromRGB(241, 130, 36) },
+		{ name = "HoldPin", text = Config.LobbyTutorialStepPin or "3  HOLD PIN TOGETHER FOR HARE!", color = Color3.fromRGB(52, 115, 225) },
+	}
+	for index, step in ipairs(steps) do
+		local card = Instance.new("TextLabel")
+		card.Name = step.name
+		card.Position = UDim2.fromScale(0.025 + ((index - 1) * 0.325), 0.36)
+		card.Size = UDim2.fromScale(0.30, 0.56)
+		card.BackgroundColor3 = Color3.fromRGB(246, 244, 235)
+		card.BorderColor3 = step.color
+		card.BorderSizePixel = 8
+		card.Font = Enum.Font.GothamBlack
+		card.Text = step.text
+		card.TextColor3 = Color3.fromRGB(24, 27, 34)
+		card.TextScaled = true
+		card.TextWrapped = true
+		card.Parent = background
+	end
+
+	return board
+end
+
+local function addProximityPrompt(parent, actionText, objectText)
+	local prompt = Instance.new("ProximityPrompt")
+	prompt.Name = "CourtChoosePrompt"
+	prompt.ActionText = actionText
+	prompt.ObjectText = objectText
+	prompt.KeyboardKeyCode = Enum.KeyCode.E
+	prompt.GamepadKeyCode = Enum.KeyCode.ButtonX
+	prompt.HoldDuration = 0
+	prompt.MaxActivationDistance = 14
+	prompt.RequiresLineOfSight = false
+	prompt.Parent = parent
+	return prompt
+end
+
+local function getCourtSpawn(courtId)
+	local courtFolder = CourtsFolder:FindFirstChild(tostring(courtId) .. "Court")
+	return courtFolder and courtFolder:FindFirstChild("SpawnPoint")
+end
+
+local function findCourtConfig(courtId)
+	for _, court in ipairs(Config.CourtSelections or {}) do
+		if court.Id == courtId then
+			return court
+		end
+	end
+	return (Config.CourtSelections and Config.CourtSelections[1]) or { Id = "Grass", X = 0 }
+end
+
+local function rememberCourtSelection(courtId)
+	for _, existingCourtId in ipairs(courtSelectionOrder) do
+		if existingCourtId == courtId then
+			return
+		end
+	end
+	table.insert(courtSelectionOrder, courtId)
+end
+
+getCourtVoteSummary = function()
+	local voteCounts = {}
+	local totalVotes = 0
+	for _, player in ipairs(Players:GetPlayers()) do
+		local courtId = selectedCourtByPlayer[player]
+		if courtId then
+			voteCounts[courtId] = (voteCounts[courtId] or 0) + 1
+			totalVotes += 1
+		end
+	end
+
+	local winningCourtId = activeCourtId
+	local winningVotes = 0
+	for _, courtId in ipairs(courtSelectionOrder) do
+		local votes = voteCounts[courtId] or 0
+		if votes > winningVotes then
+			winningCourtId = courtId
+			winningVotes = votes
+		end
+	end
+
+	if winningVotes <= 0 then
+		winningCourtId = activeCourtId
+	end
+
+	return findCourtConfig(winningCourtId), voteCounts, winningVotes, totalVotes
+end
+
+getSelectedMatchCourt = function()
+	local court = getCourtVoteSummary()
+	return court
+end
+
+local function isCourtAvailable(courtId)
+	return not (matchRunning and courtId == activeCourtId)
+end
+
+getCourtAvailabilitySummary = function()
+	local availability = {}
+	for _, court in ipairs(Config.CourtSelections or {}) do
+		availability[court.Id] = isCourtAvailable(court.Id)
+	end
+	return availability
+end
+
+local function updateLobbyParticipantBoardStatus()
+	if not lobbyParticipantLabel then
+		return
+	end
+	local readyCount, activeCount = getLobbyReadyCount()
+	local format = Config.LobbyParticipantCountFormat or "Players %d / Ready %d"
+	lobbyParticipantLabel.Text = string.format(format, activeCount, readyCount)
+end
+
+local function updateCourtSelectBoardStatus()
+	local selectedCourt, voteCounts = getCourtVoteSummary()
+	local selectedCourtId = selectedCourt and selectedCourt.Id or activeCourtId
+	for _, court in ipairs(Config.CourtSelections or {}) do
+		local courtId = court.Id
+		local label = courtButtonLabels[courtId]
+		local button = courtButtons[courtId]
+		local votes = voteCounts[courtId] or 0
+		if label then
+			local status = votes > 0 and string.format("Votes %d", votes) or "OPEN"
+			if matchRunning and courtId == activeCourtId then
+				status = "PLAYING"
+			elseif courtId == selectedCourtId then
+				status = "Selected  " .. status
+			end
+			label.Text = string.format("%s\n%s", court.Label or tostring(courtId), status)
+		end
+		if button then
+			if matchRunning and courtId == activeCourtId then
+				button.Color = Color3.fromRGB(255, 220, 90)
+			elseif courtId == selectedCourtId then
+				button.Color = (court.Color or Color3.fromRGB(120, 180, 120)):Lerp(Color3.fromRGB(255, 255, 255), 0.22)
+			else
+			button.Color = court.Color or Color3.fromRGB(120, 180, 120)
+		end
+	end
+	updateLobbyParticipantBoardStatus()
+end
+end
+
+local function teleportPlayerToLobby(player)
+	local root = getAliveRoot(player)
+	local lobbySpawn = LobbyFolder:FindFirstChild("LobbySpawn")
+	if root and lobbySpawn and lobbySpawn:IsA("BasePart") then
+		root.CFrame = lobbySpawn.CFrame + Vector3.new(0, 3, 0)
+	end
+end
+
+local function teleportPlayersToLobby()
+	for _, player in ipairs(Players:GetPlayers()) do
+		teleportPlayerToLobby(player)
+	end
+end
+
+local function setCourtPreviewPadsEnabled(enabled)
+	for _, courtFolder in ipairs(CourtsFolder:GetChildren()) do
+		local previewPad = courtFolder:FindFirstChild("PreviewPad")
+		if previewPad and previewPad:IsA("BasePart") then
+			previewPad.CanCollide = enabled == true
+			previewPad.CanTouch = enabled == true
+			previewPad.Transparency = enabled == true and 0 or (Config.MatchPreviewPadHiddenTransparency or 0.82)
+		end
+	end
+end
+
+local function returnPlayerToLobby(player)
+	if matchRunning then
+		setState("Lobby", Config.CourtUnavailableMessage or "That court is playing!")
+		return
+	end
+	selectedCourtByPlayer[player] = nil
+	lobbyReady[player] = false
+	setCourtPreviewPadsEnabled(true)
+	teleportPlayerToLobby(player)
+	updateCourtSelectBoardStatus()
+	setState("Lobby", Config.CourtReturnMessage or "Back in lobby. Choose a court, then press READY.")
+end
+
+local function teleportPlayerToCourt(player, courtId)
+	local targetSpawn = getCourtSpawn(courtId)
+	local root = getAliveRoot(player)
+	if not (targetSpawn and targetSpawn:IsA("BasePart") and root) then
+		return
+	end
+	if not isCourtAvailable(courtId) then
+		setState("Lobby", Config.CourtUnavailableMessage or "That court is playing!")
+		updateCourtSelectBoardStatus()
+		return
+	end
+	selectedCourtByPlayer[player] = courtId
+	rememberCourtSelection(courtId)
+	root.CFrame = targetSpawn.CFrame + Vector3.new(0, 3, 0)
+	lobbyReady[player] = false
+	updateCourtSelectBoardStatus()
+	local court = findCourtConfig(courtId)
+	local courtLabel = court.Label or tostring(courtId)
+	setState("Lobby", string.format(Config.CourtSelectedMessageFormat or "%s selected. Press READY.", courtLabel))
+end
+
+local lobbyEntryTouchAtByPlayer = {}
+
+local function selectLobbyEntry(player, entry)
+	if not playerState[player] then
+		return
+	end
+	local courtId = entry.CourtId or activeCourtId
+	if not isCourtAvailable(courtId) then
+		setState("Lobby", Config.CourtUnavailableMessage or "That court is playing!")
+		updateCourtSelectBoardStatus()
+		return
+	end
+
+	selectedCourtByPlayer[player] = courtId
+	rememberCourtSelection(courtId)
+	lobbyReady[player] = false
+	updateCourtSelectBoardStatus()
+
+	local label = entry.Label or Config.PracticeVsBotsButtonLabel or tostring(entry.Id or "Practice")
+	setState("Lobby", string.format(Config.LobbyEntrySelectedMessageFormat or "%s selected. Press READY.", label))
+end
+
+local function getLobbyEntryPadName(entry)
+	if entry.Id == "Quick2v2" then
+		return "Quick2v2EntryPad"
+	elseif entry.Id == "PrivateFriends" then
+		return "PrivateFriendsEntryPad"
+	end
+	return "PracticeEntryPad"
+end
+
+local function connectLobbyEntryPad(entryPad, entry)
+	entryPad:SetAttribute("LobbyEntryId", entry.Id)
+	entryPad:SetAttribute("CourtId", entry.CourtId or activeCourtId)
+	entryPad.CanTouch = Config.LobbyEntryPadTouchJoinEnabled ~= false
+
+	local entryPadDetector = Instance.new("ClickDetector")
+	entryPadDetector.MaxActivationDistance = 24
+	entryPadDetector.Parent = entryPad
+	entryPadDetector.MouseClick:Connect(function(player)
+		selectLobbyEntry(player, entry)
+	end)
+
+	local entryPadPrompt = addProximityPrompt(entryPad, Config.LobbyEntryPromptActionText or "Join", entry.Label or tostring(entry.Id))
+	entryPadPrompt.Triggered:Connect(function(player)
+		selectLobbyEntry(player, entry)
+	end)
+
+	if Config.LobbyEntryPadTouchJoinEnabled == false then
+		return
+	end
+	entryPad.Touched:Connect(function(hit)
+		local character = hit and hit.Parent
+		local player = character and Players:GetPlayerFromCharacter(character)
+		if not player then
+			return
+		end
+		local now = os.clock()
+		if (lobbyEntryTouchAtByPlayer[player] or 0) + 0.8 > now then
+			return
+		end
+		lobbyEntryTouchAtByPlayer[player] = now
+		selectLobbyEntry(player, entry)
+	end)
+end
+
+Monetization.getProduct = function(productKey)
+	for _, product in ipairs(Config.MonetizationProducts or {}) do
+		if product.Key == productKey then
+			return product
+		end
+	end
+	return nil
+end
+
+Monetization.getPassId = function(product)
+	if not product then
+		return 0
+	end
+	local passId = Config[product.PassIdKey or ""]
+	if typeof(passId) ~= "number" then
+		return 0
+	end
+	return passId
+end
+
+Monetization.refreshOwnership = function(player)
+	local ownership = {}
+	if Config.MonetizationLiteEnabled == false then
+		monetizationOwnership[player] = ownership
+		return ownership
+	end
+	for _, product in ipairs(Config.MonetizationProducts or {}) do
+		local passId = Monetization.getPassId(product)
+		local owned = false
+		if passId > 0 then
+			local success, result = pcall(function()
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
+			end)
+			owned = success and result == true
+		end
+		ownership[product.Key] = owned
+	end
+	monetizationOwnership[player] = ownership
+	return ownership
+end
+
+Monetization.buildPayload = function(player, openShop, message)
+	local ownership = monetizationOwnership[player] or Monetization.refreshOwnership(player)
+	local products = {}
+	for _, product in ipairs(Config.MonetizationProducts or {}) do
+		local passId = Monetization.getPassId(product)
+		table.insert(products, {
+			key = product.Key,
+			name = product.Name,
+			description = product.Description,
+			passIdSet = passId > 0,
+			owned = ownership[product.Key] == true,
+		})
+	end
+	return {
+		enabled = Config.MonetizationLiteEnabled ~= false,
+		open = openShop == true,
+		message = message or "",
+		title = Config.MonetizationShopTitle or "COSMETIC SHOP",
+		subtitle = Config.MonetizationShopSubtitle or "Style only. No power boosts.",
+		ownedLabel = Config.MonetizationOwnedLabel or "OWNED",
+		buyLabel = Config.MonetizationBuyLabel or "BUY",
+		products = products,
+	}
+end
+
+Monetization.sendState = function(player, openShop, message)
+	if Config.MonetizationLiteEnabled == false then
+		return
+	end
+	MonetizationStateEvent:FireClient(player, Monetization.buildPayload(player, openShop, message))
+end
+
+Monetization.promptPass = function(player, productKey)
+	local product = Monetization.getProduct(productKey)
+	if not product then
+		return
+	end
+	local passId = Monetization.getPassId(product)
+	if passId <= 0 then
+		Monetization.sendState(player, true, Config.MonetizationUnavailableMessage or "Pass IDs are not set yet.")
+		return
+	end
+	local ownership = monetizationOwnership[player] or Monetization.refreshOwnership(player)
+	if ownership[product.Key] == true then
+		Monetization.sendState(player, true, Config.MonetizationOwnedLabel or "OWNED")
+		return
+	end
+	local success, err = pcall(function()
+		MarketplaceService:PromptGamePassPurchase(player, passId)
+	end)
+	if not success then
+		warn("[TDServer] Could not prompt game pass purchase: " .. tostring(err))
+		Monetization.sendState(player, true, Config.MonetizationUnavailableMessage or "Pass IDs are not set yet.")
+	end
+end
+
+Monetization.standTouchAtByPlayer = {}
+
+Monetization.openShop = function(player)
+	Monetization.refreshOwnership(player)
+	Monetization.sendState(player, true, "")
+end
+
+Monetization.connectStand = function(stand)
+	stand:SetAttribute("TD_CosmeticStand", true)
+	local detector = Instance.new("ClickDetector")
+	detector.MaxActivationDistance = 24
+	detector.Parent = stand
+	detector.MouseClick:Connect(Monetization.openShop)
+
+	local prompt = addProximityPrompt(stand, Config.MonetizationPromptActionText or "Shop", Config.MonetizationStandTitle or "COSMETIC SHOP")
+	prompt.Triggered:Connect(Monetization.openShop)
+
+	stand.Touched:Connect(function(hit)
+		local character = hit and hit.Parent
+		local player = character and Players:GetPlayerFromCharacter(character)
+		if not player then
+			return
+		end
+		local now = os.clock()
+		if (Monetization.standTouchAtByPlayer[player] or 0) + 1.0 > now then
+			return
+		end
+		Monetization.standTouchAtByPlayer[player] = now
+		Monetization.openShop(player)
+	end)
+end
+
+PracticeWall.hitCountByPlayer = {}
+PracticeWall.lastHitAtByPlayer = {}
+
+PracticeWall.playForPlayer = function(player)
+	if Config.PracticeWallEnabled == false then
+		return
+	end
+	local now = os.clock()
+	if (PracticeWall.lastHitAtByPlayer[player] or 0) + (Config.PracticeWallCooldownSeconds or 0.75) > now then
+		return
+	end
+	PracticeWall.lastHitAtByPlayer[player] = now
+	Analytics.recordForPlayer(player, "PracticeStarted")
+	PracticeWall.hitCountByPlayer[player] = (PracticeWall.hitCountByPlayer[player] or 0) + 1
+
+	local practiceBall = LobbyFolder:FindFirstChild("TD_PracticeWallBall")
+	local target = LobbyFolder:FindFirstChild("TD_PracticeWallTarget")
+	local pad = LobbyFolder:FindFirstChild("TD_PracticeWallPad")
+	if not (practiceBall and practiceBall:IsA("BasePart") and target and target:IsA("BasePart") and pad and pad:IsA("BasePart")) then
+		return
+	end
+
+	local hitCount = PracticeWall.hitCountByPlayer[player]
+	local fxType = "OnePin"
+	local comboCount = 1
+	if hitCount % (Config.PracticeWallHareEvery or 3) == 0 then
+		fxType = "Hare"
+		comboCount = math.max(1, math.floor(hitCount / (Config.PracticeWallHareEvery or 3)))
+	elseif hitCount % 2 == 0 then
+		fxType = "Slack"
+	end
+
+	local startCFrame = pad.CFrame + Vector3.new(0, 2.2, 0)
+	local targetCFrame = target.CFrame + Vector3.new(0, 0.4, -0.8)
+	practiceBall.Transparency = 0
+	practiceBall.CFrame = startCFrame
+	local tween = TweenService:Create(practiceBall, TweenInfo.new(Config.PracticeWallBallTravelSeconds or 0.42, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		CFrame = targetCFrame,
+	})
+	tween:Play()
+	tween.Completed:Connect(function()
+		if practiceBall and practiceBall.Parent then
+			practiceBall.CFrame = startCFrame
+			practiceBall.Transparency = 0.18
+		end
+	end)
+
+	HitFxEvent:FireClient(player, fxType, practiceBall.Position, player.Team and player.Team.Name or "Red", hitCount, comboCount)
+end
+
+PracticeWall.connectPad = function(practicePad)
+	local detector = Instance.new("ClickDetector")
+	detector.MaxActivationDistance = 24
+	detector.Parent = practicePad
+	detector.MouseClick:Connect(PracticeWall.playForPlayer)
+
+	local practicePrompt = addProximityPrompt(practicePad, Config.PracticeWallPromptActionText or "Practice", Config.PracticeWallPromptObjectText or "Practice Wall")
+	practicePrompt.Triggered:Connect(PracticeWall.playForPlayer)
+
+	practicePad.Touched:Connect(function(hit)
+		local character = hit and hit.Parent
+		local player = character and Players:GetPlayerFromCharacter(character)
+		if player then
+			PracticeWall.playForPlayer(player)
+		end
+	end)
+end
+
+local function createCourtSelectionWorld()
+	clearFolder(LobbyFolder)
+	clearFolder(CourtsFolder)
+	courtButtonLabels = {}
+	courtButtons = {}
+	lobbyParticipantLabel = nil
+
+	local lobbySpawnPos = Config.LobbySpawnPosition or Vector3.new(0, 3, -88)
+	local modePadZ = lobbySpawnPos.Z + (Config.LobbyModePadZOffset or 18)
+	local readyBoardZ = lobbySpawnPos.Z + (Config.LobbyReadyBoardZOffset or 32)
+	local courtBoardZ = lobbySpawnPos.Z + (Config.LobbyCourtBoardZOffset or 48)
+	local lobbyCenterZ = lobbySpawnPos.Z + ((Config.LobbyCourtBoardZOffset or 48) / 2)
+	makeWorldPart(LobbyFolder, "LobbyFloor", Vector3.new(86, 0.35, 76), CFrame.new(lobbySpawnPos.X, -0.2, lobbyCenterZ), Color3.fromRGB(38, 72, 58), Enum.Material.Grass, true)
+	local lobbySpawn = makeWorldPart(LobbyFolder, "LobbySpawn", Vector3.new(4, 1, 4), CFrame.new(lobbySpawnPos), Color3.fromRGB(255, 230, 120), Enum.Material.Neon, false)
+	lobbySpawn.Transparency = 0.35
+
+	local modeBoard = makeWorldPart(LobbyFolder, "LobbyModeBoard", Vector3.new(42, 3.6, 1.0), CFrame.new(lobbySpawnPos.X, 4.8, modePadZ - 8), Color3.fromRGB(12, 18, 28), Enum.Material.SmoothPlastic, true)
+	addBillboardText(modeBoard, string.format("%s\n%s", Config.LobbyModeBoardTitle or "1  CHOOSE MODE", Config.LobbyFlowHelpText or "Choose mode, optional court, then READY."), Vector2.new(390, 68), Vector3.new(0, 1.0, 0), false, 54)
+
+	addLobbyTutorialBoard(LobbyFolder, lobbySpawnPos)
+
+	if Config.DailyBoostEnabled ~= false then
+		local dailyBoard = makeWorldPart(LobbyFolder, "DailyBoostBoard", Vector3.new(32, 4.0, 1.0), CFrame.new(lobbySpawnPos.X, 4.9, lobbySpawnPos.Z + 14), Color3.fromRGB(42, 32, 64), Enum.Material.SmoothPlastic, true)
+		addBillboardText(dailyBoard, string.format("%s\n%s", Config.DailyBoostBoardTitle or "DAILY BOOST", Config.DailyBoostBoardHelp or "Hit 1 HARE + Rally 4 to earn a Boost."), Vector2.new(300, 66), Vector3.new(0, 1.0, 0), false, 46)
+	end
+
+	local participantBoard = makeWorldPart(LobbyFolder, "LobbyParticipantBoard", Vector3.new(18, 3.2, 1.0), CFrame.new(lobbySpawnPos.X - 30, 4.2, readyBoardZ), Color3.fromRGB(22, 32, 46), Enum.Material.SmoothPlastic, true)
+	local participantGui, participantLabel = addBillboardText(participantBoard, string.format(Config.LobbyParticipantCountFormat or "Players %d / Ready %d", 0, 0), Vector2.new(178, 44), Vector3.new(0, 1.0, 0), false, 46)
+	participantGui.Name = "LobbyParticipantLabel"
+	lobbyParticipantLabel = participantLabel
+
+	local spectatorArea = makeWorldPart(LobbyFolder, "LobbySpectatorArea", Vector3.new(18, 0.45, 9), CFrame.new(lobbySpawnPos.X + 30, 0.25, readyBoardZ), Color3.fromRGB(118, 132, 150), Enum.Material.SmoothPlastic, true)
+	addBillboardText(spectatorArea, string.format("%s\n%s", Config.LobbySpectatorLabel or "SPECTATE", Config.LobbySpectatorHelp or "Watch the next match from here."), Vector2.new(180, 52), Vector3.new(0, 2.0, 0), false, 46)
+
+	if Config.PracticeWallEnabled ~= false then
+		local practiceX = lobbySpawnPos.X + (Config.PracticeWallXOffset or 30)
+		local practiceZ = lobbySpawnPos.Z + (Config.PracticeWallZOffset or 18)
+		local practiceWall = makeWorldPart(LobbyFolder, "TD_PracticeWall", Vector3.new(18, 9, 1.2), CFrame.new(practiceX, 4.4, practiceZ + 8), Color3.fromRGB(32, 44, 62), Enum.Material.SmoothPlastic, true)
+		addBillboardText(practiceWall, string.format("%s\n%s", Config.PracticeWallTitle or "PRACTICE WALL", Config.PracticeWallHelp or "Hit PIN!  Try HARE!"), Vector2.new(190, 64), Vector3.new(0, 1.0, 0), false, 48)
+		local practiceTarget = makeWorldPart(LobbyFolder, "TD_PracticeWallTarget", Vector3.new(5.5, 5.5, 0.35), CFrame.new(practiceX, 4.3, practiceZ + 7.15), Color3.fromRGB(255, 226, 118), Enum.Material.Neon, false)
+		practiceTarget.Transparency = 0.20
+		local practicePad = makeWorldPart(LobbyFolder, "TD_PracticeWallPad", Vector3.new(14, 0.55, 7), CFrame.new(practiceX, 0.35, practiceZ), Color3.fromRGB(255, 226, 118), Enum.Material.Neon, true)
+		addBillboardText(practicePad, "Practice Wall\nHit PIN!", Vector2.new(160, 48), Vector3.new(0, 2.0, 0), false, 42)
+		local practiceBall = makeWorldPart(LobbyFolder, "TD_PracticeWallBall", Vector3.new(2.0, 2.0, 2.0), CFrame.new(practiceX, 2.4, practiceZ), Color3.fromRGB(255, 245, 180), Enum.Material.Neon, false)
+		practiceBall.Shape = Enum.PartType.Ball
+		practiceBall.CanTouch = false
+		practiceBall.Transparency = 0.18
+		PracticeWall.connectPad(practicePad)
+	end
+
+	if Config.MonetizationLiteEnabled ~= false then
+		local shopStand = makeWorldPart(LobbyFolder, "TD_CosmeticStand", Vector3.new(18, 0.55, 8), CFrame.new(lobbySpawnPos.X - 30, 0.35, modePadZ), Color3.fromRGB(255, 174, 98), Enum.Material.Neon, true)
+		addBillboardText(shopStand, string.format("%s\n%s", Config.MonetizationStandTitle or "COSMETIC SHOP", Config.MonetizationStandHelp or "Fiber colors and HARE FX. No pay-to-win."), Vector2.new(180, 58), Vector3.new(0, 2.0, 0), false, 44)
+		Monetization.connectStand(shopStand)
+	end
+
+	for _, entry in ipairs(Config.LobbyEntryPads or {}) do
+		local entryPad = makeWorldPart(LobbyFolder, getLobbyEntryPadName(entry), Vector3.new(15, 0.55, 9), CFrame.new(lobbySpawnPos.X + (entry.X or 0), 0.35, modePadZ), entry.Color or Color3.fromRGB(120, 180, 120), Enum.Material.Neon, true)
+		addBillboardText(entryPad, string.format("%s\n%s", entry.Label or tostring(entry.Id), entry.SubLabel or ""), Vector2.new(164, 58), Vector3.new(0, 2.0, 0), false, 44)
+		connectLobbyEntryPad(entryPad, entry)
+	end
+
+	local readyBoard = makeWorldPart(LobbyFolder, "LobbyReadyBoard", Vector3.new(28, 3.6, 1.0), CFrame.new(lobbySpawnPos.X, 4.6, readyBoardZ), Color3.fromRGB(255, 226, 118), Enum.Material.SmoothPlastic, true)
+	addBillboardText(readyBoard, string.format("%s\n%s", Config.LobbyReadyBoardTitle or "3  PRESS READY", Config.LobbyReadySubMessage or "Choose a mode pad, then press READY."), Vector2.new(260, 60), Vector3.new(0, 1.0, 0), false, 48)
+
+	local board = Instance.new("Folder")
+	board.Name = "CourtSelectBoard"
+	board.Parent = LobbyFolder
+	makeWorldPart(board, "BoardBack", Vector3.new(42, 8, 1.2), CFrame.new(lobbySpawnPos.X, 4, courtBoardZ), Color3.fromRGB(24, 34, 42), Enum.Material.WoodPlanks, true)
+	local title = makeWorldPart(board, "HowToStartSign", Vector3.new(38, 4.5, 0.8), CFrame.new(lobbySpawnPos.X, 8.2, courtBoardZ + 0.3), Color3.fromRGB(12, 18, 28), Enum.Material.SmoothPlastic, false)
+	addBillboardText(title, string.format("%s\n%s", Config.LobbyCourtBoardTitle or Config.CourtSelectBoardTitle or "OPTIONAL COURT THEME", Config.CourtSelectBoardHelp or "Pick a look, or keep the selected mode."), Vector2.new(360, 86), Vector3.new(0, 1.0, 0), false, 48)
+
+	local courts = Config.CourtSelections or {}
+	for index, court in ipairs(courts) do
+		local buttonX = lobbySpawnPos.X - 20 + (index - 1) * 10
+		local button = makeWorldPart(board, tostring(court.Id) .. "Button", Vector3.new(8.5, 3.2, 1.4), CFrame.new(buttonX, 3.4, courtBoardZ + 1), court.Color or Color3.fromRGB(120, 180, 120), Enum.Material.SmoothPlastic, true)
+		button:SetAttribute("CourtId", court.Id)
+		local _, label = addBillboardText(button, court.Label or tostring(court.Id), Vector2.new(112, 46), Vector3.new(0, 2.2, 0), false, 36)
+		courtButtonLabels[court.Id] = label
+		courtButtons[court.Id] = button
+		local detector = Instance.new("ClickDetector")
+		detector.MaxActivationDistance = 24
+		detector.Parent = button
+		detector.MouseClick:Connect(function(player)
+			teleportPlayerToCourt(player, button:GetAttribute("CourtId"))
+		end)
+		local prompt = addProximityPrompt(button, Config.CourtPromptActionText or "Choose", court.Label or tostring(court.Id))
+		prompt.Triggered:Connect(function(player)
+			teleportPlayerToCourt(player, button:GetAttribute("CourtId"))
+		end)
+
+		local courtFolder = Instance.new("Folder")
+		courtFolder.Name = tostring(court.Id) .. "Court"
+		courtFolder.Parent = CourtsFolder
+		local x = court.X or ((index - 1) * 300)
+		makeWorldPart(courtFolder, "PreviewPad", Vector3.new(64, 0.35, 64), CFrame.new(x, -0.2, 0), court.Color or Color3.fromRGB(96, 185, 58), Enum.Material.SmoothPlastic, true)
+		makeWorldPart(courtFolder, "CourtSpawn", Vector3.new(4, 1, 4), CFrame.new(x, 1, -36), Color3.fromRGB(255, 230, 120), Enum.Material.Neon, false)
+		local spawn = makeWorldPart(courtFolder, "SpawnPoint", Vector3.new(4, 1, 4), CFrame.new(x, 3, -40), Color3.fromRGB(255, 255, 255), Enum.Material.Neon, false)
+		spawn.Transparency = 0.4
+		addBillboardText(spawn, court.Label or tostring(court.Id), Vector2.new(118, 32), Vector3.new(0, 2.0, 0), false, 42)
+		local returnPad = makeWorldPart(courtFolder, "BackToLobbyPad", Vector3.new(8, 0.45, 5), CFrame.new(x, 0.2, -47), Color3.fromRGB(255, 235, 110), Enum.Material.Neon, false)
+		addBillboardText(returnPad, Config.CourtReturnPromptObjectText or "Back to Lobby", Vector2.new(132, 34), Vector3.new(0, 1.8, 0), false, 42)
+		local returnPrompt = addProximityPrompt(returnPad, Config.CourtReturnPromptActionText or "Lobby", Config.CourtReturnPromptObjectText or "Back to Lobby")
+		returnPrompt.Triggered:Connect(function(player)
+			returnPlayerToLobby(player)
+		end)
+	end
+	updateCourtSelectBoardStatus()
 end
 
 local function createCrowdDots()
@@ -245,7 +1331,7 @@ local function createCrowdDots()
 			dot.CanQuery = false
 			dot.CanTouch = false
 			dot.Size = Vector3.new(1.15, 1.15, 1.15)
-			dot.Position = Vector3.new(x, 1.1 + ((i % 3) * 0.18), z)
+			dot.Position = courtPosition(x, 1.1 + ((i % 3) * 0.18), z)
 			dot.Material = Enum.Material.Neon
 			local mix = (i + sideIndex) % 3
 			if mix == 0 then
@@ -265,8 +1351,132 @@ local function createCrowdDots()
 	end
 end
 
-local function createCourt()
+local function createJuiceBorders(total)
+	local w = Config.CourtWidth
+	local trimColor = Color3.fromRGB(130, 185, 255)
+	local borders = {
+		{ "JuiceBorder_Left", Vector3.new(0.22, 0.22, total * 2 + 1.0), Vector3.new(-w / 2 - 0.82, 0.28, 0) },
+		{ "JuiceBorder_Right", Vector3.new(0.22, 0.22, total * 2 + 1.0), Vector3.new(w / 2 + 0.82, 0.28, 0) },
+		{ "JuiceBorder_Red", Vector3.new(w + 1.6, 0.22, 0.22), Vector3.new(0, 0.28, total + 0.82) },
+		{ "JuiceBorder_Blue", Vector3.new(w + 1.6, 0.22, 0.22), Vector3.new(0, 0.28, -total - 0.82) },
+	}
+	for _, info in ipairs(borders) do
+		local strip = makeNonCollidePart(info[1], info[2], info[3], trimColor, Enum.Material.Neon, VisualsFolder)
+		strip:SetAttribute("BaseColorR", trimColor.R)
+		strip:SetAttribute("BaseColorG", trimColor.G)
+		strip:SetAttribute("BaseColorB", trimColor.B)
+	end
+end
+
+local function createMatchSpawns()
+	createSpawn("RedSpawn1", Vector3.new(-10, 3, 18))
+	createSpawn("RedSpawn2", Vector3.new(10, 3, 18))
+	createSpawn("BlueSpawn1", Vector3.new(-10, 3, -18))
+	createSpawn("BlueSpawn2", Vector3.new(10, 3, -18))
+end
+
+local function createTeamSideGuides()
+	if Config.TeamSideLabelEnabled == false then
+		return
+	end
+
+	local labelSize = Config.TeamSideLabelSize or 13
+	local ringSize = Config.TeamSpawnRingSize or 7.8
+	local redSideLabel = makeNonCollidePart("RedSideFloorLabel", Vector3.new(labelSize * 2.7, 0.016, labelSize), Vector3.new(0, 0.36, Config.CourtDepth * 0.58), TEAM_COLORS.Red, Enum.Material.Neon, VisualsFolder)
+	redSideLabel.Transparency = 0.28
+	addSurfaceText(redSideLabel, "RED SIDE", Color3.fromRGB(255, 255, 255), Enum.NormalId.Top)
+
+	local blueSideLabel = makeNonCollidePart("BlueSideFloorLabel", Vector3.new(labelSize * 2.7, 0.016, labelSize), Vector3.new(0, 0.36, -Config.CourtDepth * 0.58), TEAM_COLORS.Blue, Enum.Material.Neon, VisualsFolder)
+	blueSideLabel.Transparency = 0.28
+	addSurfaceText(blueSideLabel, "BLUE SIDE", Color3.fromRGB(255, 255, 255), Enum.NormalId.Top)
+
+	for _, info in ipairs({
+		{ "RedSpawnRing1", TEAM_COLORS.Red, Vector3.new(-10, 0.38, 18) },
+		{ "RedSpawnRing2", TEAM_COLORS.Red, Vector3.new(10, 0.38, 18) },
+		{ "BlueSpawnRing1", TEAM_COLORS.Blue, Vector3.new(-10, 0.38, -18) },
+		{ "BlueSpawnRing2", TEAM_COLORS.Blue, Vector3.new(10, 0.38, -18) },
+	}) do
+		local ring = makeNonCollidePart(info[1], Vector3.new(ringSize, 0.018, ringSize), info[3], info[2], Enum.Material.Neon, VisualsFolder)
+		ring.Shape = Enum.PartType.Cylinder
+		ring.CFrame = CFrame.new(courtPosition(info[3].X, info[3].Y, info[3].Z))
+		ring.Transparency = 0.48
+	end
+end
+
+local function findArenaTemplate(arenaConfig)
+	local waitSeconds = arenaConfig.ModelWaitSeconds or 3
+	local modelName = arenaConfig.ModelName or "TDArena_TileField64"
+	local arenaFolder = ServerStorage:FindFirstChild(Config.ArenaFolderName or "Arenas")
+	if not arenaFolder then
+		arenaFolder = ServerStorage:WaitForChild(Config.ArenaFolderName or "Arenas", waitSeconds)
+	end
+
+	local template = arenaFolder and arenaFolder:FindFirstChild(modelName)
+	if not template and arenaFolder then
+		template = arenaFolder:WaitForChild(modelName, waitSeconds)
+	end
+	if template then
+		return template
+	end
+
+	template = ServerStorage:FindFirstChild(modelName)
+	if template then
+		return template
+	end
+
+	local legacyName = arenaConfig.LegacyModelName
+	if legacyName then
+		template = ServerStorage:FindFirstChild(legacyName)
+		if template then
+			return template
+		end
+	end
+
+	if activeCourtId == "Grass" or arenaConfig.CourtId == "Grass" then
+		return ServerStorage:FindFirstChild("TDArena_TileField64")
+	end
+	return nil
+end
+
+local function createConfiguredArenaCourt()
+	if not shouldUseCourtArena() then
+		return false
+	end
+
+	local arenaConfig = getCourtArenaConfig(activeCourtId)
+	local modelName = arenaConfig.ModelName or "TDArena_TileField64"
+	local template = findArenaTemplate(arenaConfig)
+	if not template then
+		warn(("[TDServer] %s was not found in ServerStorage/%s or legacy ServerStorage roots; using generated flat court fallback. Run %s first."):format(modelName, Config.ArenaFolderName or "Arenas", arenaConfig.BuilderScriptPath or "the arena builder"))
+		return false
+	end
+	if not template:IsA("Model") then
+		warn(("[TDServer] Arena template %s is not a Model; using generated flat court fallback."):format(template:GetFullName()))
+		return false
+	end
+
+	local arena = template:Clone()
+	arena.Name = "Active_" .. modelName
+	arena:SetAttribute("RuntimeCourtId", activeCourtId)
+	arena:SetAttribute("SourceImagePath", arenaConfig.SourceImagePath or "")
+	arena:SetAttribute("SourceDataPath", arenaConfig.SourceDataPath or "data/arena/tile-field-64-arena.json")
+	arena:SetAttribute("BuilderScriptPath", arenaConfig.BuilderScriptPath or "scripts/roblox/build_tile_field_64_arena.server.lua")
+	arena:PivotTo(CFrame.new(activeCourtOrigin))
+	arena.Parent = CourtFolder
+
+	createJuiceBorders(activeHalfDepth())
+	createTeamSideGuides()
+	createMatchSpawns()
+	return true
+end
+
+local function createCourt(origin)
+	activeCourtOrigin = origin or activeCourtOrigin
 	clearGeneratedCourt()
+
+	if createConfiguredArenaCourt() then
+		return
+	end
 
 	local w = Config.CourtWidth
 	local d = Config.CourtDepth
@@ -288,19 +1498,8 @@ local function createCourt()
 	makePart("Wall_BlueBack", Vector3.new(w + 1.4, Config.WallHeight, 0.7), Vector3.new(0, Config.WallHeight / 2, -total - 0.35), wallColor, Enum.Material.SmoothPlastic)
 
 	-- Neon arena trim. These pulse gold on HARE.
-	local trimColor = Color3.fromRGB(130, 185, 255)
-	local borders = {
-		{ "JuiceBorder_Left", Vector3.new(0.22, 0.22, total * 2 + 1.0), Vector3.new(-w / 2 - 0.82, 0.28, 0) },
-		{ "JuiceBorder_Right", Vector3.new(0.22, 0.22, total * 2 + 1.0), Vector3.new(w / 2 + 0.82, 0.28, 0) },
-		{ "JuiceBorder_Red", Vector3.new(w + 1.6, 0.22, 0.22), Vector3.new(0, 0.28, total + 0.82) },
-		{ "JuiceBorder_Blue", Vector3.new(w + 1.6, 0.22, 0.22), Vector3.new(0, 0.28, -total - 0.82) },
-	}
-	for _, info in ipairs(borders) do
-		local strip = makeNonCollidePart(info[1], info[2], info[3], trimColor, Enum.Material.Neon, VisualsFolder)
-		strip:SetAttribute("BaseColorR", trimColor.R)
-		strip:SetAttribute("BaseColorG", trimColor.G)
-		strip:SetAttribute("BaseColorB", trimColor.B)
-	end
+	createJuiceBorders(total)
+	createTeamSideGuides()
 
 	-- Center emblem: floor-art style so it does not read as a physical obstacle.
 	local emblemY = 0.154
@@ -308,14 +1507,14 @@ local function createCourt()
 	emblem.Transparency = Config.CenterEmblemTransparency or 0.62
 	local ring = makeNonCollidePart("CenterEmblemSoftRing", Vector3.new(Config.CenterEmblemSize * 1.16, 0.010, Config.CenterEmblemSize * 1.16), Vector3.new(0, emblemY + 0.006, 0), Color3.fromRGB(255, 230, 120), Enum.Material.SmoothPlastic, VisualsFolder)
 	ring.Shape = Enum.PartType.Cylinder
-	ring.CFrame = CFrame.new(0, emblemY + 0.012, 0)
+	ring.CFrame = CFrame.new(courtPosition(0, emblemY + 0.012, 0))
 	ring.Transparency = 0.86
 	ring.CastShadow = false
 	local rayColor = Color3.fromRGB(255, 235, 130)
 	for i = 1, 8 do
 		local angle = (math.pi * 2) * (i - 1) / 8
 		local ray = makeNonCollidePart("CenterEmblemRay", Vector3.new(0.12, 0.010, Config.CenterEmblemSize * 0.58), Vector3.new(0, emblemY + 0.012, 0), rayColor, Enum.Material.Neon, VisualsFolder)
-		ray.CFrame = CFrame.new(0, emblemY + 0.012, 0) * CFrame.Angles(0, angle, 0)
+		ray.CFrame = CFrame.new(courtPosition(0, emblemY + 0.012, 0)) * CFrame.Angles(0, angle, 0)
 		ray.Transparency = 0.76
 		ray.CastShadow = false
 	end
@@ -327,10 +1526,7 @@ local function createCourt()
 	createFlag("Blue", w / 2 + 4.5, -total + 4)
 	createCrowdDots()
 
-	createSpawn("RedSpawn1", Vector3.new(-10, 3, 18))
-	createSpawn("RedSpawn2", Vector3.new(10, 3, 18))
-	createSpawn("BlueSpawn1", Vector3.new(-10, 3, -18))
-	createSpawn("BlueSpawn2", Vector3.new(10, 3, -18))
+	createMatchSpawns()
 end
 
 local function ensureTeams()
@@ -470,7 +1666,7 @@ local function ensureGhostPartners()
 			if not ghostPartners[teamName][i] or not ghostPartners[teamName][i].Parent then
 				local x = (i == 1) and -8 or 8
 				local z = side * 18
-				ghostPartners[teamName][i] = createGhostPart(teamName, i, Vector3.new(x, Config.NetVisualHeight, z))
+				ghostPartners[teamName][i] = createGhostPart(teamName, i, courtPosition(x, Config.NetVisualHeight, z))
 			end
 		end
 	end
@@ -499,9 +1695,56 @@ local function ensureBallReadabilityHalo(part)
 	return halo
 end
 
+local function ensureServeBallLabel(part)
+	local gui = part:FindFirstChild("TD_ServeLabel")
+	if not (gui and gui:IsA("BillboardGui")) then
+		gui = Instance.new("BillboardGui")
+		gui.Name = "TD_ServeLabel"
+		gui.AlwaysOnTop = true
+		gui.Size = UDim2.fromOffset(96, 34)
+		gui.StudsOffset = Vector3.new(0, 3.4, 0)
+		gui.MaxDistance = 160
+		gui.Enabled = false
+		gui.Parent = part
+
+		local label = Instance.new("TextLabel")
+		label.Name = "TD_ServeLabelText"
+		label.Size = UDim2.fromScale(1, 1)
+		label.BackgroundColor3 = Color3.fromRGB(10, 14, 24)
+		label.BackgroundTransparency = 0.18
+		label.Text = Config.ServeBallLabelText or "SERVE"
+		label.TextColor3 = Color3.fromRGB(255, 245, 180)
+		label.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+		label.TextStrokeTransparency = 0.20
+		label.TextScaled = true
+		label.Font = Enum.Font.GothamBlack
+		label.Parent = gui
+	end
+	return gui
+end
+
+local function setServeBallLabelVisible(visible, teamName)
+	local part = ball.part
+	if not part then
+		return
+	end
+	local gui = ensureServeBallLabel(part)
+	local label = gui:FindFirstChild("TD_ServeLabelText")
+	if label and label:IsA("TextLabel") then
+		label.Text = Config.ServeBallLabelText or "SERVE"
+		if teamName == "Red" then
+			label.TextColor3 = TEAM_COLORS.Red:Lerp(Color3.fromRGB(255, 255, 255), 0.22)
+		elseif teamName == "Blue" then
+			label.TextColor3 = TEAM_COLORS.Blue:Lerp(Color3.fromRGB(255, 255, 255), 0.22)
+		end
+	end
+	gui.Enabled = visible == true
+end
+
 local function ensureBallPart()
 	if ball.part and ball.part.Parent then
 		ensureBallReadabilityHalo(ball.part)
+		ensureServeBallLabel(ball.part)
 		return ball.part
 	end
 
@@ -548,6 +1791,7 @@ local function ensureBallPart()
 	part.Parent = workspace
 	ball.part = part
 	ensureBallReadabilityHalo(part)
+	ensureServeBallLabel(part)
 	return part
 end
 
@@ -565,6 +1809,9 @@ local function setBallVisualHidden(hidden)
 	local transparency = hidden and 1 or 0
 	if ball.part then
 		ball.part.Transparency = transparency
+	end
+	if hidden then
+		setServeBallLabelVisible(false)
 	end
 	local halo = workspace:FindFirstChild("TD_BallReadabilityHalo")
 	if halo and halo:IsA("BasePart") then
@@ -634,8 +1881,9 @@ local function predictBallLanding()
 
 	local predicted = ball.position + ball.velocity * t + Vector3.new(0, -0.5 * gravity * t * t, 0)
 	local out = isBallOutsideArena(predicted)
-	local clampedX = math.clamp(predicted.X, -halfWidth(), halfWidth())
-	local clampedZ = math.clamp(predicted.Z, -totalHalfDepth(), totalHalfDepth())
+	local clampedX = math.clamp(predicted.X, activeCourtOrigin.X - halfWidth(), activeCourtOrigin.X + halfWidth())
+	local zHalfDepth = activeHalfDepth()
+	local clampedZ = math.clamp(predicted.Z, activeCourtOrigin.Z - zHalfDepth, activeCourtOrigin.Z + zHalfDepth)
 	return Vector3.new(clampedX, 0.33, clampedZ), out
 end
 
@@ -663,8 +1911,6 @@ local function updateLandingTargetMarker()
 	marker.Transparency = out and (Config.LandingTargetOutTransparency or 0.12) or (Config.LandingTargetTransparency or 0.28)
 	marker.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
 end
-
-local getAliveRoot
 
 local function ensurePinIndicator(player)
 	local key = tostring(player.UserId)
@@ -800,6 +2046,25 @@ teamCount = function(teamName)
 	return #getTeamPlayers(teamName)
 end
 
+setLobbyReady = function(player, ready)
+	if not playerState[player] then
+		return
+	end
+	if queuedNextMatchPlayers[player] == true then
+		lobbyReady[player] = false
+		updateCourtSelectBoardStatus()
+		broadcastState(Config.LateJoinSpectatorMessage or "NEXT MATCH QUEUE")
+		return
+	end
+	lobbyReady[player] = ready == true
+	updateCourtSelectBoardStatus()
+	if not matchRunning then
+		startMatchIfPossible()
+	else
+		broadcastState()
+	end
+end
+
 local function assignTeam(player)
 	local redTeam = TeamsService:FindFirstChild("Red")
 	local blueTeam = TeamsService:FindFirstChild("Blue")
@@ -815,6 +2080,43 @@ local function assignTeam(player)
 	player.Neutral = false
 end
 
+local function assignSpectator(player)
+	local spectatorTeam = TeamsService:FindFirstChild(Config.SpectatorTeamName or "Spectators")
+	if not spectatorTeam then
+		spectatorTeam = Instance.new("Team")
+		spectatorTeam.Name = Config.SpectatorTeamName or "Spectators"
+		spectatorTeam.AutoAssignable = false
+		spectatorTeam.Parent = TeamsService
+	end
+	spectatorTeam.TeamColor = BrickColor.new(Color3.fromRGB(160, 170, 185))
+	player.Team = spectatorTeam
+	player.Neutral = true
+end
+
+local function queuePlayerForNextMatch(player)
+	queuedNextMatchPlayers[player] = true
+	lobbyReady[player] = false
+	selectedCourtByPlayer[player] = nil
+	assignSpectator(player)
+	teleportPlayerToLobby(player)
+	updateCourtSelectBoardStatus()
+	setState("Lobby", Config.LateJoinSpectatorMessage or "NEXT MATCH QUEUE")
+end
+
+local function activateQueuedNextMatchPlayers()
+	for player in pairs(queuedNextMatchPlayers) do
+		if player.Parent == Players then
+			queuedNextMatchPlayers[player] = nil
+			assignTeam(player)
+			lobbyReady[player] = false
+			teleportPlayerToLobby(player)
+		else
+			queuedNextMatchPlayers[player] = nil
+		end
+	end
+	updateCourtSelectBoardStatus()
+end
+
 local function teleportToSpawn(player)
 	local teamName = player.Team and player.Team.Name or "Red"
 	local teamPlayers = getTeamPlayers(teamName)
@@ -828,7 +2130,11 @@ local function teleportToSpawn(player)
 	local spawn = SpawnFolder:FindFirstChild(teamName .. "Spawn" .. tostring(index))
 	local root = getAliveRoot(player)
 	if spawn and root then
-		root.CFrame = CFrame.new(spawn.Position)
+		local spawnPosition = spawn.Position + Vector3.new(0, Config.MatchSpawnHeightOffset or 2.5, 0)
+		local lookAt = courtPosition(0, spawnPosition.Y, 0)
+		root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+		root.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
+		root.CFrame = CFrame.lookAt(spawnPosition, lookAt)
 	end
 end
 
@@ -839,39 +2145,251 @@ local function setupLeaderstats(player)
 		leaderstats.Name = "leaderstats"
 		leaderstats.Parent = player
 	end
-	if not leaderstats:FindFirstChild("Wins") then
-		local wins = Instance.new("IntValue")
-		wins.Name = "Wins"
-		wins.Value = 0
-		wins.Parent = leaderstats
+	local function ensureLeaderstat(player, statName, initialValue)
+		local existing = leaderstats:FindFirstChild(statName)
+		if existing and existing:IsA("IntValue") then
+			return existing
+		end
+		local stat = Instance.new("IntValue")
+		stat.Name = statName
+		stat.Value = initialValue or 0
+		stat.Parent = leaderstats
+		return stat
+	end
+	local function ensureLeaderTitle(player, statName, initialValue)
+		local existing = leaderstats:FindFirstChild(statName)
+		if existing and existing:IsA("StringValue") then
+			return existing
+		end
+		local stat = Instance.new("StringValue")
+		stat.Name = statName
+		stat.Value = initialValue or ""
+		stat.Parent = leaderstats
+		return stat
+	end
+
+	ensureLeaderstat(player, Config.ProgressStatWins or "Wins", 0)
+	ensureLeaderstat(player, Config.ProgressStatHares or "HAREs", 0)
+	ensureLeaderstat(player, Config.ProgressStatBestRally or "Best Rally", 0)
+	ensureLeaderstat(player, Config.ProgressStatTeamSyncs or "Team Syncs", 0)
+	ensureLeaderstat(player, Config.ProgressStatDailyBoosts or "Daily Boosts", 0)
+	ensureLeaderTitle(player, Config.ProgressStatTitle or "Title", Config.ProgressTitleDefault or "Rally Starter")
+end
+
+local function getProgressStat(player, statName)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local stat = leaderstats and leaderstats:FindFirstChild(statName)
+	if stat and stat:IsA("IntValue") then
+		return stat
+	end
+	return nil
+end
+
+local function getProgressTitle(player)
+	local leaderstats = player:FindFirstChild("leaderstats")
+	local title = leaderstats and leaderstats:FindFirstChild(Config.ProgressStatTitle or "Title")
+	if title and title:IsA("StringValue") then
+		return title
+	end
+	return nil
+end
+
+local function updateProgressTitle(player)
+	if Config.ProgressLiteEnabled == false then
+		return
+	end
+	local title = getProgressTitle(player)
+	if not title then
+		return
+	end
+
+	local hares = getProgressStat(player, Config.ProgressStatHares or "HAREs")
+	local teamSyncs = getProgressStat(player, Config.ProgressStatTeamSyncs or "Team Syncs")
+	local nextTitle = Config.ProgressTitleDefault or "Rally Starter"
+	if teamSyncs and teamSyncs.Value >= (Config.ProgressTitleSyncPartnerAt or 3) then
+		nextTitle = Config.ProgressTitleSyncPartner or "Sync Partner"
+	elseif hares and hares.Value >= (Config.ProgressTitleHareRookieAt or 1) then
+		nextTitle = Config.ProgressTitleHareRookie or "HARE Rookie"
+	end
+	title.Value = nextTitle
+end
+
+local function updateDailyBoostProgress(player)
+	if Config.DailyBoostEnabled == false or Config.ProgressLiteEnabled == false then
+		return
+	end
+	if dailyBoostClaimed[player] == true then
+		return
+	end
+	local hares = getProgressStat(player, Config.ProgressStatHares or "HAREs")
+	local bestRally = getProgressStat(player, Config.ProgressStatBestRally or "Best Rally")
+	local boosts = getProgressStat(player, Config.ProgressStatDailyBoosts or "Daily Boosts")
+	if not hares or not bestRally or not boosts then
+		return
+	end
+	if hares.Value >= (Config.DailyBoostHareTarget or 1) and bestRally.Value >= (Config.DailyBoostRallyTarget or 4) then
+		boosts.Value += 1
+		dailyBoostClaimed[player] = true
+		MatchStateEvent:FireClient(player, {
+			state = currentState,
+			redScore = score.Red,
+			blueScore = score.Blue,
+			message = Config.DailyBoostEarnedMessage or "DAILY BOOST EARNED!",
+			title = Config.Title,
+			dailyBoostEarned = true,
+		})
+	end
+end
+
+local function getPlayerFiberSkinColor(player)
+	if Config.FiberSkinsEnabled == false then
+		return Config.FiberSkinDefaultColor or BEAM_COLORS.Normal
+	end
+	local title = getProgressTitle(player)
+	local titleValue = title and title.Value or Config.ProgressTitleDefault
+	if titleValue == (Config.ProgressTitleSyncPartner or "Sync Partner") then
+		return Config.FiberSkinSyncPartnerColor or Color3.fromRGB(112, 245, 208)
+	elseif titleValue == (Config.ProgressTitleHareRookie or "HARE Rookie") then
+		return Config.FiberSkinHareRookieColor or Color3.fromRGB(255, 218, 92)
+	end
+	return Config.FiberSkinDefaultColor or BEAM_COLORS.Normal
+end
+
+local function getTeamFiberSkinColor(teamName)
+	local players = getTeamPlayers(teamName)
+	if #players <= 0 then
+		return Config.FiberSkinDefaultColor or BEAM_COLORS.Normal
+	end
+
+	local mixed = Color3.new(0, 0, 0)
+	for _, player in ipairs(players) do
+		local color = getPlayerFiberSkinColor(player)
+		mixed = Color3.new(mixed.R + color.R, mixed.G + color.G, mixed.B + color.B)
+	end
+	return Color3.new(mixed.R / #players, mixed.G / #players, mixed.B / #players)
+end
+
+local function applyFiberSkinColor(baseColor, teamName, tensionState, realPinCount)
+	if Config.FiberSkinsEnabled == false then
+		return baseColor
+	end
+	if tensionState == "Slack" or tensionState == "OverTension" or tensionState == "Broken" then
+		return baseColor
+	end
+	if realPinCount == 1 then
+		return Config.FiberSkinOnePinColor or baseColor
+	end
+	local skinColor = getTeamFiberSkinColor(teamName)
+	return baseColor:Lerp(skinColor, Config.FiberSkinBlend or 0.36)
+end
+
+local function recordBestRallyForMatchPlayers(rallyCount)
+	if Config.ProgressLiteEnabled == false or rallyCount <= 0 then
+		return
+	end
+	for _, player in ipairs(Players:GetPlayers()) do
+		local bestRally = getProgressStat(player, Config.ProgressStatBestRally or "Best Rally")
+		if bestRally then
+			bestRally.Value = math.max(bestRally.Value, rallyCount)
+		end
+		updateProgressTitle(player)
+		updateDailyBoostProgress(player)
+	end
+end
+
+local function recordTeamSync(teamName, fxType)
+	if Config.ProgressLiteEnabled == false then
+		return
+	end
+	if fxType ~= "Hare" then
+		return
+	end
+	for _, player in ipairs(getTeamPlayers(teamName)) do
+		local hares = getProgressStat(player, Config.ProgressStatHares or "HAREs")
+		local teamSyncs = getProgressStat(player, Config.ProgressStatTeamSyncs or "Team Syncs")
+		if hares then
+			hares.Value += 1
+		end
+		if teamSyncs then
+			teamSyncs.Value += 1
+		end
+		updateProgressTitle(player)
+		updateDailyBoostProgress(player)
+	end
+end
+
+local function recordWinForTeam(teamName)
+	if Config.ProgressLiteEnabled == false then
+		return
+	end
+	for _, player in ipairs(getTeamPlayers(teamName)) do
+		local wins = getProgressStat(player, Config.ProgressStatWins or "Wins")
+		if wins then
+			wins.Value += 1
+		end
+		updateProgressTitle(player)
 	end
 end
 
 local function onPlayerAdded(player)
 	setupLeaderstats(player)
+	markPlayerActivity(player)
+	Analytics.recordForPlayer(player, "LobbyEntered")
+	Monetization.refreshOwnership(player)
 	playerState[player] = {
 		IsPinning = false,
 		LastPinStartTime = -math.huge,
+		FirstHareCelebrated = false,
 	}
-	assignTeam(player)
+	lobbyReady[player] = false
+	if matchRunning and Config.LateJoinSpectatorEnabled ~= false then
+		queuePlayerForNextMatch(player)
+	else
+		assignTeam(player)
+	end
+	updateCourtSelectBoardStatus()
 
 	player.CharacterAdded:Connect(function(character)
 		configureCharacter(player, character)
 		task.wait(0.1)
-		teleportToSpawn(player)
+		if queuedNextMatchPlayers[player] == true then
+			teleportPlayerToLobby(player)
+		elseif matchRunning then
+			teleportToSpawn(player)
+		else
+			teleportPlayerToLobby(player)
+		end
 	end)
 
 	if player.Character then
 		configureCharacter(player, player.Character)
 		task.wait(0.1)
-		teleportToSpawn(player)
+		if queuedNextMatchPlayers[player] == true then
+			teleportPlayerToLobby(player)
+		elseif matchRunning then
+			teleportToSpawn(player)
+		else
+			teleportPlayerToLobby(player)
+		end
 	end
 
-	broadcastState("Welcome to PINTO HARE!")
+	if queuedNextMatchPlayers[player] == true then
+		broadcastState(Config.LateJoinSpectatorMessage or "NEXT MATCH QUEUE")
+	else
+		broadcastState("Welcome to PINTO HARE!")
+	end
 end
 
 local function onPlayerRemoving(player)
 	playerState[player] = nil
+	Analytics.playerFlags[player] = nil
+	lobbyReady[player] = nil
+	selectedCourtByPlayer[player] = nil
+	queuedNextMatchPlayers[player] = nil
+	lastPlayerActivityAt[player] = nil
+	monetizationOwnership[player] = nil
+	dailyBoostClaimed[player] = nil
+	updateCourtSelectBoardStatus()
 end
 
 local function makeBeam(teamName)
@@ -974,11 +2492,11 @@ local function setCpuPartnerActive(part, active)
 end
 
 local function teamZClamp(teamName, z)
-	local total = totalHalfDepth() - 3
+	local total = activeHalfDepth() - 3
 	if teamName == "Red" then
-		return math.clamp(z, 3, total)
+		return math.clamp(z, activeCourtOrigin.Z + 3, activeCourtOrigin.Z + total)
 	end
-	return math.clamp(z, -total, -3)
+	return math.clamp(z, activeCourtOrigin.Z - total, activeCourtOrigin.Z - 3)
 end
 
 local function moveCpuPartner(part, target, dt)
@@ -1000,9 +2518,9 @@ local function cpuTargetWithError(target)
 	local xSteps = math.max(1, math.floor(errorAmount * 10))
 	local zSteps = math.max(1, math.floor(errorAmount * 6))
 	return Vector3.new(
-		math.clamp(target.X + math.random(-xSteps, xSteps) / 10, -halfWidth() + 3, halfWidth() - 3),
+		math.clamp(target.X + math.random(-xSteps, xSteps) / 10, activeCourtOrigin.X - halfWidth() + 3, activeCourtOrigin.X + halfWidth() - 3),
 		target.Y,
-		teamZClamp(target.Z >= 0 and "Red" or "Blue", target.Z + math.random(-zSteps, zSteps) / 10)
+		teamZClamp(target.Z >= activeCourtOrigin.Z and "Red" or "Blue", target.Z + math.random(-zSteps, zSteps) / 10)
 	)
 end
 
@@ -1036,8 +2554,8 @@ local function updateCpuFillPartners(dt)
 		end
 
 		local ghosts = ghostPartners[teamName]
-		local trackX = math.clamp(ball.position.X, -halfWidth() + 6, halfWidth() - 6)
-		local baseZ = side * (Config.CpuFillCourtZ or 18)
+		local trackX = math.clamp(ball.position.X, activeCourtOrigin.X - halfWidth() + 6, activeCourtOrigin.X + halfWidth() - 6)
+		local baseZ = activeCourtOrigin.Z + side * (Config.CpuFillCourtZ or 18)
 		if ball.active then
 			baseZ = teamZClamp(teamName, ball.position.Z + side * (Config.CpuFillBallTrackZOffset or 5))
 		end
@@ -1045,8 +2563,8 @@ local function updateCpuFillPartners(dt)
 
 		if #realRoots == 0 then
 			local targets = {
-				Vector3.new(math.clamp(trackX - span / 2, -halfWidth() + 3, halfWidth() - 3), Config.NetVisualHeight, baseZ),
-				Vector3.new(math.clamp(trackX + span / 2, -halfWidth() + 3, halfWidth() - 3), Config.NetVisualHeight, baseZ),
+				Vector3.new(math.clamp(trackX - span / 2, activeCourtOrigin.X - halfWidth() + 3, activeCourtOrigin.X + halfWidth() - 3), Config.NetVisualHeight, baseZ),
+				Vector3.new(math.clamp(trackX + span / 2, activeCourtOrigin.X - halfWidth() + 3, activeCourtOrigin.X + halfWidth() - 3), Config.NetVisualHeight, baseZ),
 			}
 			for i = 1, 2 do
 				if ghosts[i] then
@@ -1062,7 +2580,7 @@ local function updateCpuFillPartners(dt)
 			local root = realRoots[1]
 			local offsetX = (root.Position.X < trackX) and span or -span
 			local target = Vector3.new(
-				math.clamp(root.Position.X + offsetX, -halfWidth() + 3, halfWidth() - 3),
+				math.clamp(root.Position.X + offsetX, activeCourtOrigin.X - halfWidth() + 3, activeCourtOrigin.X + halfWidth() - 3),
 				Config.NetVisualHeight,
 				teamZClamp(teamName, root.Position.Z)
 			)
@@ -1136,6 +2654,7 @@ local function updateTeamBeam(teamName)
 		transparency = 0.65
 		curve = Config.BeamCurveSlack or 2.8
 	end
+	color = applyFiberSkinColor(color, teamName, tensionState, realPinCount)
 
 	beam.CurveSize0 = curve
 	beam.CurveSize1 = -curve
@@ -1250,10 +2769,15 @@ local function clampPlayersToCourt()
 	if not Config.ClampPlayersToCourt then
 		return
 	end
+	if not matchRunning or currentState == "Lobby" or currentState == "WaitingForPlayers" then
+		return
+	end
 
-	local xMin = -halfWidth() + 1.5
-	local xMax = halfWidth() - 1.5
-	local zTotal = totalHalfDepth() - 1.5
+	local baseX = activeCourtOrigin.X
+	local xMin = baseX - halfWidth() + 1.5
+	local xMax = baseX + halfWidth() - 1.5
+	local baseZ = activeCourtOrigin.Z
+	local zTotal = activeHalfDepth() - 1.5
 
 	for _, player in ipairs(Players:GetPlayers()) do
 		local root = getAliveRoot(player)
@@ -1263,9 +2787,9 @@ local function clampPlayersToCourt()
 			local x = math.clamp(pos.X, xMin, xMax)
 			local z
 			if teamName == "Red" then
-				z = math.clamp(pos.Z, 1.5, zTotal)
+				z = math.clamp(pos.Z, baseZ + 1.5, baseZ + zTotal)
 			else
-				z = math.clamp(pos.Z, -zTotal, -1.5)
+				z = math.clamp(pos.Z, baseZ - zTotal, baseZ - 1.5)
 			end
 			if math.abs(x - pos.X) > 0.05 or math.abs(z - pos.Z) > 0.05 then
 				local newPos = Vector3.new(x, pos.Y, z)
@@ -1286,19 +2810,88 @@ local function resetPlayersToSpawns()
 	end
 end
 
+local fireHitFx
+local setBallVisualForFx
+
+local function getServeChargeForTeam(teamName)
+	local charge = {
+		kind = "NormalServe",
+		message = string.upper(teamName) .. " SERVES",
+		fxType = "Normal",
+		speed = Config.BallServeSpeed,
+		verticalVelocity = Config.ServeVerticalVelocity or 5.2,
+		lateralMax = Config.ServeLateralMax or 4.5,
+	}
+
+	if Config.ServeChargeEnabled == false then
+		return charge
+	end
+
+	local a, b = getNetEndpoints(teamName)
+	if not a or not b then
+		return charge
+	end
+
+	local tensionState = getTensionState(a, b)
+	local pinInfo = getTeamPinInfo(teamName)
+	local pinDelta = pinInfo.maxStart - pinInfo.minStart
+
+	if tensionState == "Slack" then
+		charge.kind = "SlackServe"
+		charge.message = Config.ServeSlackMessage or "SAFE FLOAT SERVE!"
+		charge.fxType = "Slack"
+		charge.speed = Config.ServeSlackSpeed or 34
+		charge.verticalVelocity = Config.ServeSlackVerticalVelocity or 7.4
+		charge.lateralMax = Config.ServeSlackLateralMax or 2.4
+	elseif tensionState == "OverTension" or tensionState == "Broken" then
+		charge.kind = "OverTensionServe"
+		charge.message = Config.ServeOverTensionMessage or "WILD SERVE!"
+		charge.fxType = "OverTension"
+		charge.speed = Config.ServeOverTensionSpeed or 44
+		charge.verticalVelocity = Config.ServeOverTensionVerticalVelocity or 3.8
+		charge.lateralMax = Config.ServeOverTensionLateralMax or 8.4
+	elseif pinInfo.pinCount >= 2 then
+		if pinDelta <= (Config.ServeHarePinDelta or 0.38) then
+			charge.kind = "HareServe"
+			charge.message = Config.ServeHareMessage or "HARE SERVE!"
+			charge.fxType = "Hare"
+			charge.speed = Config.ServeHareSpeed or 47
+			charge.verticalVelocity = Config.ServeHareVerticalVelocity or 3.7
+			charge.lateralMax = Config.ServeHareLateralMax or 2.0
+		else
+			charge.kind = "ChargedServe"
+			charge.message = Config.ServeChargedMessage or "SYNC SERVE!"
+			charge.fxType = "Normal"
+			charge.speed = Config.ServeChargedSpeed or 43
+			charge.verticalVelocity = Config.ServeChargedVerticalVelocity or 4.6
+			charge.lateralMax = Config.ServeChargedLateralMax or 3.2
+		end
+	elseif pinInfo.pinCount == 1 then
+		charge.kind = "OnePinServe"
+		charge.message = Config.ServeOnePinMessage or "SLICE SERVE!"
+		charge.fxType = "OnePin"
+		charge.speed = Config.ServeOnePinSpeed or 42
+		charge.verticalVelocity = Config.ServeOnePinVerticalVelocity or 4.8
+		charge.lateralMax = Config.ServeOnePinLateralMax or 7.2
+	end
+
+	return charge
+end
+
 local function serveBall(servingTeam)
 	rallyHitCount = 0
 	local side = MathUtil.teamSideSign(servingTeam)
 	local part = ensureBallPart()
+	local serveCharge = getServeChargeForTeam(servingTeam)
 
 	-- v0.5.3: Serve uses its own speed/arc.
 	-- Return balance lowered PIN shots in v0.5.2, but the opening serve also became too short.
 	-- Keep serves friendly, but make them land around the opponent mid-court instead of the front edge.
-	local startZ = side * (Config.ServeStartZ or 7.5)
-	local lateralMax = Config.ServeLateralMax or 4.5
-	local serveY = Config.ServeVerticalVelocity or 5.2
-	ball.position = Vector3.new(0, Config.ServeHeight, startZ)
-	ball.velocity = Vector3.new(math.random(-lateralMax * 10, lateralMax * 10) / 10, serveY, -side * Config.BallServeSpeed)
+	local startZ = activeCourtOrigin.Z + side * (Config.ServeStartZ or 7.5)
+	local lateralMax = serveCharge.lateralMax
+	local serveY = serveCharge.verticalVelocity
+	ball.position = Vector3.new(activeCourtOrigin.X, Config.ServeHeight, startZ)
+	ball.velocity = Vector3.new(math.random(-lateralMax * 10, lateralMax * 10) / 10, serveY, -side * serveCharge.speed)
 	ball.lastTouchedTeam = servingTeam
 	ball.active = true
 	ball.pausedUntil = 0
@@ -1308,7 +2901,15 @@ local function serveBall(servingTeam)
 	end
 	part.Color = Color3.fromRGB(255, 245, 180)
 	setBallVisualHidden(false)
+	setServeBallLabelVisible(true, servingTeam)
+	if setBallVisualForFx then
+		setBallVisualForFx(serveCharge.fxType)
+	end
 	setBallVisualCFrame(CFrame.new(ball.position))
+	if fireHitFx and serveCharge.fxType ~= "Normal" then
+		fireHitFx(serveCharge.fxType, ball.position, servingTeam)
+	end
+	return serveCharge
 end
 
 local function hideBall()
@@ -1326,6 +2927,8 @@ local function awardPoint(scoringTeam, reason, losingTeam)
 	end
 	score[scoringTeam] += 1
 	local rallyCountAtPoint = rallyHitCount
+	recordMatchRallyResult(rallyCountAtPoint)
+	recordBestRallyForMatchPlayers(rallyCountAtPoint)
 	hareCombo.Red = 0
 	hareCombo.Blue = 0
 	lastPointLoser = losingTeam or MathUtil.opponent(scoringTeam)
@@ -1346,7 +2949,7 @@ local function awardPoint(scoringTeam, reason, losingTeam)
 end
 
 isBallOutsideArena = function(pos)
-	return math.abs(pos.X) > halfWidth() or math.abs(pos.Z) > totalHalfDepth()
+	return math.abs(pos.X - activeCourtOrigin.X) > halfWidth() or math.abs(pos.Z - activeCourtOrigin.Z) > activeHalfDepth()
 end
 
 local function processGroundOrOut()
@@ -1359,7 +2962,7 @@ local function processGroundOrOut()
 	end
 
 	if pos.Y <= Config.BallRadius then
-		if pos.Z >= 0 then
+		if pos.Z >= activeCourtOrigin.Z then
 			awardPoint("Blue", Config.ScoreReasonDropText or "DROP!", "Red")
 		else
 			awardPoint("Red", Config.ScoreReasonDropText or "DROP!", "Blue")
@@ -1481,12 +3084,24 @@ local function spawnHareSparkColumn(position)
 	Debris:AddItem(spark, duration + 0.1)
 end
 
-local function fireHitFx(fxType, position, teamName)
+fireHitFx = function(fxType, position, teamName)
 	local combo = hareCombo[teamName] or 0
-	HitFxEvent:FireAllClients(fxType, position, teamName, rallyHitCount, combo)
+	if fxType ~= "Hare" or Config.FirstHareCelebrationEnabled == false then
+		HitFxEvent:FireAllClients(fxType, position, teamName, rallyHitCount, combo, false)
+		return
+	end
+
+	for _, player in ipairs(Players:GetPlayers()) do
+		local state = playerState[player]
+		local isFirstHare = state ~= nil and player.Team ~= nil and player.Team.Name == teamName and state.FirstHareCelebrated ~= true
+		if isFirstHare then
+			state.FirstHareCelebrated = true
+		end
+		HitFxEvent:FireClient(player, fxType, position, teamName, rallyHitCount, combo, isFirstHare)
+	end
 end
 
-local function setBallVisualForFx(fxType)
+setBallVisualForFx = function(fxType)
 	local part = ball.part
 	if not part then
 		return
@@ -1680,6 +3295,11 @@ local function processNetHit(teamName)
 	lastTeamHitTime[teamName] = now
 	rallyHitCount += 1
 	setBallVisualForFx(fxType)
+	recordMatchHitResult(fxType)
+	if fxType == "Hare" then
+		Analytics.recordForTeamPlayers(teamName, "FirstHare")
+	end
+	recordTeamSync(teamName, fxType)
 
 	if fxType == "Slack" then
 		spawnShockwave(closest, BEAM_COLORS.Slack, Config.SlackAbsorbRippleSize or 9, Config.SlackAbsorbRippleDuration or 0.34, "TD_SlackAbsorbRipple")
@@ -1687,7 +3307,7 @@ local function processNetHit(teamName)
 
 	if fxType == "Hare" then
 		ball.pausedUntil = now + Config.HareFreezeTime
-		spawnShockwave(closest, BEAM_COLORS.Hare, Config.HareShockwaveSize, Config.HareShockwaveDuration, "TD_HareShockwave")
+		spawnShockwave(closest, getTeamFiberSkinColor(teamName):Lerp(BEAM_COLORS.Hare, 0.55), Config.HareShockwaveSize, Config.HareShockwaveDuration, "TD_HareShockwave")
 		spawnShockwave(closest, Color3.fromRGB(255, 246, 160), Config.HareHardeningRingSize or 16, Config.HareHardeningRingDuration or 0.30, "TD_HareHardeningRing")
 		spawnHareSparkColumn(closest)
 		pulseArena(teamName)
@@ -1793,15 +3413,54 @@ local function updateCpuPinning()
 	end
 end
 
-local function canStartMatch()
-	local count = #Players:GetPlayers()
-	if Config.AllowGhostPartners then
-		return count >= Config.MinPlayersToAutoStart
+MatchLoop.updateAfkSafety = function()
+	if Config.AfkSafetyEnabled == false then
+		return
 	end
-	return count >= 4
+	local now = os.clock()
+	local readyChanged = false
+	for _, player in ipairs(Players:GetPlayers()) do
+		local lastActivity = lastPlayerActivityAt[player] or now
+		local state = playerState[player]
+		if lobbyReady[player] == true and now - lastActivity >= (Config.LobbyReadyAfkSeconds or 90) then
+			lobbyReady[player] = false
+			readyChanged = true
+		end
+		if state and state.IsPinning and now - (state.LastPinStartTime or now) >= (Config.PinHoldAfkReleaseSeconds or 12) then
+			state.IsPinning = false
+			state.LastPinStartTime = -math.huge
+		end
+	end
+	if readyChanged then
+		updateCourtSelectBoardStatus()
+		setState("Lobby", Config.AfkReadyClearedMessage or "READY cleared after inactivity.")
+	end
 end
 
-local function runReadyUp()
+MatchLoop.hasEnoughPlayers = function()
+	local _, activeCount = getLobbyReadyCount()
+	return activeCount >= requiredPlayerCount()
+end
+
+MatchLoop.getLobbyGate = function()
+	if not MatchLoop.hasEnoughPlayers() then
+		return false, "WaitingForPlayers", Config.WaitingMessage .. "  Red " .. tostring(teamCount("Red")) .. "/2 - Blue " .. tostring(teamCount("Blue")) .. "/2"
+	end
+	if not allLobbyPlayersReady() then
+		local readyCount, activeCount = getLobbyReadyCount()
+		local neededCount = math.max(requiredPlayerCount(), activeCount)
+		return false, "Lobby", string.format("%s  %d/%d", Config.LobbyWaitingReadyMessage or "Ready up!", readyCount, neededCount)
+	end
+	return true, "Lobby", Config.LobbyAllReadyMessage or "All ready!"
+end
+
+MatchLoop.resetLobbyReady = function()
+	for _, player in ipairs(Players:GetPlayers()) do
+		lobbyReady[player] = false
+	end
+end
+
+MatchLoop.runReadyUp = function()
 	local readyTime = Config.PreMatchReadyTime or 0
 	if readyTime <= 0 then
 		return
@@ -1810,7 +3469,7 @@ local function runReadyUp()
 	task.wait(readyTime)
 end
 
-local function runCountdown()
+MatchLoop.runCountdown = function()
 	setState("Countdown", "3")
 	for i = Config.CountdownTime, 1, -1 do
 		setState("Countdown", tostring(i))
@@ -1820,49 +3479,68 @@ local function runCountdown()
 	task.wait(0.45)
 end
 
-local function finishGame(winner)
+MatchLoop.finishGame = function(winner)
 	winningTeam = winner
+	Analytics.record("MatchCompleted")
 	setState("GameOver", string.upper(winner) .. " WINS!  PLAY AGAIN IN " .. tostring(Config.GameOverDelay))
-
-	for _, player in ipairs(getTeamPlayers(winner)) do
-		local leaderstats = player:FindFirstChild("leaderstats")
-		local wins = leaderstats and leaderstats:FindFirstChild("Wins")
-		if wins and wins:IsA("IntValue") then
-			wins.Value += 1
-		end
-	end
+	recordWinForTeam(winner)
 
 	task.wait(Config.GameOverDelay)
 	winningTeam = nil
+	setCourtPreviewPadsEnabled(true)
+	activateQueuedNextMatchPlayers()
+	teleportPlayersToLobby()
+	updateCourtSelectBoardStatus()
 end
 
-local function startMatchIfPossible()
+startMatchIfPossible = function()
 	if matchRunning then
 		return
 	end
-	if not canStartMatch() then
-		setState("WaitingForPlayers", Config.WaitingMessage .. "  Red " .. tostring(teamCount("Red")) .. "/2 - Blue " .. tostring(teamCount("Blue")) .. "/2")
+	local canStart, waitingState, waitingMessage = MatchLoop.getLobbyGate()
+	if not canStart then
+		setState(waitingState, waitingMessage)
 		return
 	end
 
 	matchRunning = true
 	task.spawn(function()
-		while canStartMatch() do
+		while MatchLoop.hasEnoughPlayers() do
+			local court = getSelectedMatchCourt()
+			activeCourtId = court.Id or activeCourtId
+			activeCourtOrigin = Vector3.new(court.X or 0, 0, 0)
+			updateCourtSelectBoardStatus()
+			setCourtPreviewPadsEnabled(false)
+			createCourt(activeCourtOrigin)
+			ensureGhostPartners()
+			ensureBallPart()
+			hideBall()
 			score.Red = 0
 			score.Blue = 0
+			resetMatchStats()
 			lastPointLoser = "Blue"
 			winningTeam = nil
 			resetPlayersToSpawns()
-			runReadyUp()
-			runCountdown()
+			MatchLoop.runReadyUp()
+			MatchLoop.runCountdown()
 
-			while score.Red < Config.ScoreToWin and score.Blue < Config.ScoreToWin and canStartMatch() do
+			while score.Red < Config.ScoreToWin and score.Blue < Config.ScoreToWin and MatchLoop.hasEnoughPlayers() do
 				resetPlayersToSpawns()
 				local servingTeam = lastPointLoser
-				setState("Serving", string.upper(servingTeam) .. " SERVES")
+				currentServingTeam = servingTeam
+				if isFinalHareActive() then
+					setState("Serving", Config.FinalHareMessage or "FINAL HARE!")
+					task.wait(0.45)
+				end
+				setState("Serving", formatServeOwnerMessage(servingTeam))
+				task.wait(0.45)
+				setState("Serving", Config.ServeChargeMessage or string.upper(servingTeam) .. " SERVES")
 				task.wait(0.8)
 				roundActive = true
-				serveBall(servingTeam)
+				local serveCharge = serveBall(servingTeam)
+				setState("Serving", serveCharge.message)
+				task.wait(0.28)
+				setServeBallLabelVisible(false, servingTeam)
 				setState("Rally", "RALLY!")
 
 				repeat
@@ -1873,24 +3551,40 @@ local function startMatchIfPossible()
 			end
 
 			if score.Red >= Config.ScoreToWin then
-				finishGame("Red")
+				MatchLoop.finishGame("Red")
 			elseif score.Blue >= Config.ScoreToWin then
-				finishGame("Blue")
+				MatchLoop.finishGame("Blue")
 			else
 				setState("WaitingForPlayers", Config.WaitingMessage .. "  Red " .. tostring(teamCount("Red")) .. "/2 - Blue " .. tostring(teamCount("Blue")) .. "/2")
 				hideBall()
 				task.wait(1)
 			end
+
+			MatchLoop.resetLobbyReady()
+			currentServingTeam = nil
+			local canRestart, waitingState, waitingMessage = MatchLoop.getLobbyGate()
+			if not canRestart then
+				setState(waitingState, waitingMessage)
+				break
+			end
 		end
 
 		matchRunning = false
-		setState("WaitingForPlayers", Config.WaitingMessage .. "  Red " .. tostring(teamCount("Red")) .. "/2 - Blue " .. tostring(teamCount("Blue")) .. "/2")
+		currentServingTeam = nil
+		local _, waitingState, waitingMessage = MatchLoop.getLobbyGate()
+		setCourtPreviewPadsEnabled(true)
+		updateCourtSelectBoardStatus()
+		setState(waitingState, waitingMessage)
 	end)
 end
 
 PinInputEvent.OnServerEvent:Connect(function(player, isPinning)
 	if typeof(isPinning) ~= "boolean" then
 		return
+	end
+	markPlayerActivity(player)
+	if isPinning then
+		Analytics.recordForPlayer(player, "FirstPin")
 	end
 	local state = playerState[player]
 	if not state then
@@ -1899,6 +3593,46 @@ PinInputEvent.OnServerEvent:Connect(function(player, isPinning)
 	state.IsPinning = isPinning
 	if isPinning then
 		state.LastPinStartTime = os.clock()
+	end
+end)
+
+LobbyReadyEvent.OnServerEvent:Connect(function(player, ready)
+	if typeof(ready) ~= "boolean" then
+		return
+	end
+	markPlayerActivity(player)
+	if ready then
+		Analytics.recordForPlayer(player, "FirstReady")
+	end
+	setLobbyReady(player, ready)
+end)
+
+MonetizationRequestEvent.OnServerEvent:Connect(function(player, action, productKey)
+	if Config.MonetizationLiteEnabled == false then
+		return
+	end
+	if action == "OpenShop" then
+		Monetization.openShop(player)
+	elseif action == "Purchase" and typeof(productKey) == "string" then
+		Monetization.promptPass(player, productKey)
+	elseif action == "Refresh" then
+		Monetization.refreshOwnership(player)
+		Monetization.sendState(player, false, "")
+	end
+end)
+
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player, purchasedPassID, purchaseSuccess)
+	if not purchaseSuccess then
+		return
+	end
+	for _, product in ipairs(Config.MonetizationProducts or {}) do
+		if purchasedPassID == Monetization.getPassId(product) then
+			local ownership = monetizationOwnership[player] or {}
+			ownership[product.Key] = true
+			monetizationOwnership[player] = ownership
+			Monetization.sendState(player, true, Config.MonetizationOwnedLabel or "OWNED")
+			return
+		end
 	end
 end)
 
@@ -1919,6 +3653,7 @@ RunService.Heartbeat:Connect(function(dt)
 	updatePinIndicators()
 	updateCpuFillPartners(dt)
 	updateCpuPinning()
+	MatchLoop.updateAfkSafety()
 	updateTeamBeam("Red")
 	updateTeamBeam("Blue")
 	updateBall(dt)
@@ -1935,14 +3670,16 @@ end)
 
 -- Bootstrap existing players in Studio hot-reload sessions.
 ensureTeams()
-createCourt()
+createCourt(activeCourtOrigin)
+createCourtSelectionWorld()
 ensureGhostPartners()
 ensureBallPart()
 hideBall()
 
-for _, player in ipairs(Players:GetPlayers()) do
-	onPlayerAdded(player)
-end
-
 setState("WaitingForPlayers", Config.Title)
-startMatchIfPossible()
+task.defer(function()
+	for _, existingPlayer in ipairs(Players:GetPlayers()) do
+		onPlayerAdded(existingPlayer)
+	end
+	startMatchIfPossible()
+end)

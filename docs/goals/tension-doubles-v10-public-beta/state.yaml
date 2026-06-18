@@ -1,0 +1,492 @@
+# Goal Maker v2 state.yaml
+
+version: 2
+
+goal:
+  title: "Tension Doubles v1.0 Public Beta Candidate"
+  slug: "tension-doubles-v10-public-beta"
+  kind: specific
+  tranche: "Use parallel read-only scouting to map remaining v0.8/v0.9/v1.0 work, choose the next safe implementation slice, implement it, verify it, and continue until public beta candidate audit passes or blocks."
+  status: done
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+active_task: null
+
+tasks:
+  - id: T001
+    type: scout
+    assignee: Scout
+    status: done
+    reasoning_hint: medium
+    objective: "Map remaining v0.8 Fiber Skins/effects, v0.9 real 2v2 polish, and v1.0 public beta launch-readiness using parallel read-only subagents and local evidence."
+    inputs:
+      - "README.md"
+      - "MANUAL_IMPORT.md"
+      - "docs/playtests"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts"
+      - "scripts/verify-*"
+      - "Roblox Studio MCP, if active"
+    constraints:
+      - "Read-only except goal control files."
+      - "Do not implement gameplay or docs content outside this goal board."
+      - "Separate already implemented work from missing work."
+      - "Identify candidate Worker tasks with allowed_files, verification commands, and stop_if."
+    expected_output:
+      - "v0.8 remaining map"
+      - "v0.9 remaining map"
+      - "v1.0 launch-readiness map"
+      - "Verification baseline"
+      - "Candidate next Worker slices"
+    receipt:
+      result: done
+      summary: "Parallel scouts mapped remaining v0.8/v0.9/v1.0 work. v0.8 has Fiber Color implemented; remaining safe cosmetics include config-driven HARE hit text variants, Ball Trail cosmetics, and Victory Pose. v0.9 has higher public-beta risk: mid-match joiners currently enter active teams/spawns, no AFK safety, disconnect handling is preset-dependent, no team caps/rebalance, and spectator UI is shallow. v1.0 launch docs/checklists are mostly missing but lower gameplay risk."
+      verification_baseline:
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-fiber-skins.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-progress-titles.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-progress-lite.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-clarity.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-serve-charge.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-serve-ownership.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-arenas.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-wide-court-slow-normal.ps1: pass"
+        - "node scripts\\verify-v06-guided-party.mjs: pass"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx: pass"
+      evidence:
+        - "Subagent 019e9bf2-41dd-7892-8094-49f7bb93c4b5 mapped v0.8 Fiber/effects."
+        - "Subagent 019e9bf2-7bf6-7721-80fd-42ac8002ecc1 mapped v0.9 real 2v2 polish."
+        - "Subagent 019e9bf2-c260-76f1-a3a6-8ed935a27fd0 mapped v1.0 launch readiness."
+      candidate_worker_tasks:
+        - objective: "Add late-join spectator safety: players joining while matchRunning do not enter active Red/Blue play; they wait in lobby/spectator state for next match with broadcast/HUD copy."
+          allowed_files:
+            - "src/ServerScriptService/TDServer.server.lua"
+            - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+            - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+            - "scripts/verify-v09-session-safety.ps1"
+            - "docs/playtests/v10-public-beta-checklist.md"
+          verify:
+            - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-session-safety.ps1"
+            - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+            - "node scripts\\verify-v06-guided-party.mjs"
+            - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          stop_if:
+            - "Requires full matchmaking or private server routing."
+            - "Requires live Studio-only camera/spectator controls."
+            - "Requires rewriting core scoring or ball loop."
+        - objective: "Create v1.0 public beta launch-readiness docs and source contract."
+          allowed_files:
+            - "README.md"
+            - "docs/playtests/v10-public-beta-checklist.md"
+            - "scripts/verify-v10-public-beta.ps1"
+          verify:
+            - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v10-public-beta.ps1"
+            - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+
+  - id: T002
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Choose the next safe implementation slice by impact, reversibility, verification strength, and proximity to v1.0 completion."
+    inputs:
+      - "T001 receipt"
+      - "Subagent scout summaries"
+      - "Current dirty diff"
+    constraints:
+      - "Read-only."
+      - "Prefer high-leverage slices that reduce public beta risk."
+      - "Avoid full matchmaking, DataStore, monetization, heavy art pipelines, and broad rewrites."
+    expected_output:
+      - "Decision"
+      - "Exact Worker objective"
+      - "allowed_files"
+      - "verify"
+      - "stop_if"
+      - "Deferred tasks"
+    receipt:
+      result: done
+      decision: "Do v0.9 late-join spectator safety first. Launch docs are important but do not reduce active-match instability; Fiber cosmetics are lower risk and less critical than preventing mid-match joiners from being spawned into active play."
+      exact_worker_objective: "Add late-join spectator safety: players joining while matchRunning do not enter active Red/Blue play; they wait in lobby/spectator state for next match with broadcast/HUD copy."
+      allowed_files:
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "scripts/verify-v09-session-safety.ps1"
+        - "docs/playtests/v10-public-beta-checklist.md"
+      verify:
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-session-safety.ps1"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+        - "node scripts\\verify-v06-guided-party.mjs"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+      stop_if:
+        - "Requires full matchmaking or private server routing."
+        - "Requires live Studio-only camera/spectator controls."
+        - "Requires rewriting core scoring or ball loop."
+
+  - id: T003
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Add late-join spectator safety: players joining while matchRunning do not enter active Red/Blue play; they wait in lobby/spectator state for next match with broadcast/HUD copy."
+    allowed_files:
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "scripts/verify-v09-session-safety.ps1"
+      - "docs/playtests/v10-public-beta-checklist.md"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-session-safety.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+      - "node scripts\\verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Behavior or product direction is ambiguous."
+      - "Verification fails twice for the same reason."
+      - "Requires unavailable Studio runtime, credentials, publishing rights, DataStore live services, monetization, or full matchmaking."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "scripts/verify-v09-session-safety.ps1"
+        - "docs/playtests/v10-public-beta-checklist.md"
+      summary: "Added v0.9 late-join safety. Players joining during an active match are assigned to a Spectators team, queued for the next match, returned to the lobby, and shown next-match queue copy in HUD. Queued players are activated into normal teams after the match returns to lobby."
+      commands:
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-session-safety.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-clarity.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-small-lobby.ps1"
+          status: pass
+        - cmd: "node scripts\\verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-progress-lite.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-fiber-skins.ps1"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+
+  - id: T004
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Create v1.0 public beta launch-readiness docs and source-contract verification: checklist, Roblox description copy, thumbnail/icon prompt specs/placeholders, tutorial/onboarding checklist, analytics review, and public test plan."
+    allowed_files:
+      - "README.md"
+      - "docs/playtests/v10-public-beta-checklist.md"
+      - "scripts/verify-v10-public-beta.ps1"
+      - "docs/goals/tension-doubles-v10-public-beta/state.yaml"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v10-public-beta.ps1"
+      - "node scripts\\verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+    stop_if:
+      - "Need actual Roblox publishing credentials or upload."
+      - "Need final brand/art direction beyond placeholders."
+      - "Need gameplay implementation files."
+    receipt:
+      result: done
+      changed_files:
+        - "README.md"
+        - "docs/playtests/v10-public-beta-checklist.md"
+        - "scripts/verify-v10-public-beta.ps1"
+        - "docs/goals/tension-doubles-v10-public-beta/state.yaml"
+      summary: "Added v1.0 public beta launch-readiness docs and verification: public beta scope, Roblox description copy, thumbnail/icon prompt specs, tutorial/onboarding checklist, analytics review, public test plan, known deferrals, and source contract."
+      commands:
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v10-public-beta.ps1"
+          status: pass
+        - cmd: "node scripts\\verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+
+  - id: T005
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Add config-driven HARE hit text style variants as a non-power v0.8 cosmetic polish, preserving existing HitFxEvent payload and gameplay behavior."
+    allowed_files:
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "scripts/verify-hare-hit-text-styles.ps1"
+      - "docs/playtests/v10-public-beta-checklist.md"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-hare-hit-text-styles.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-fiber-skins.ps1"
+      - "node scripts\\verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+    stop_if:
+      - "Requires server payload, title-specific variants, or gameplay/scoring changes."
+      - "Requires Ball Trail cosmetics or Victory Pose in the same slice."
+      - "Static verification fails twice."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "scripts/verify-hare-hit-text-styles.ps1"
+        - "docs/playtests/v10-public-beta-checklist.md"
+      summary: "Added config-driven non-power HARE hit text variants using existing comboCount on the client. First HARE remains HARE!!, combo feedback can show DOUBLE HARE!! and HARE STREAK!! without changing server payload, scoring, physics, or progression."
+      commands:
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-hare-hit-text-styles.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-fiber-skins.ps1"
+          status: pass
+        - cmd: "node scripts\\verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+
+  - id: T900
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the accumulated work satisfies v1.0 public beta candidate readiness."
+    inputs:
+      - "All done task receipts"
+      - "Last verification"
+      - "Current dirty diff"
+      - "docs/goals/tension-doubles-v10-public-beta/goal.md"
+    constraints:
+      - "Read-only."
+      - "Reject completion if queued Worker work is still required for the v1.0 outcome."
+      - "Map audit to v0.8, v0.9, and v1.0 definition of done."
+    expected_output:
+      - "complete | not_complete"
+      - "missing evidence"
+      - "manual Studio checks remaining"
+      - "next task if not complete"
+    receipt:
+      result: done
+      decision: "not_complete"
+      summary: "v0.8 Fiber polish, v0.9 late-join spectator safety, and v1.0 launch docs are implemented and verified. Remaining v1.0 public beta risk: AFK/stuck input safety is still too weak for public testing because local client focus release is not enough to protect READY gates and long PIN holds."
+      missing_evidence:
+        - "No server-side timeout that clears lobby READY for inactive players."
+        - "No server-side timeout that releases stale PIN state if a client stops sending input."
+      next_task: T006
+
+  - id: T006
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Add bounded server-side AFK safety: track player activity through existing remotes, clear lobby READY after inactivity, release stale PIN holds, and verify without adding movement telemetry or CPU takeover."
+    allowed_files:
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "scripts/verify-v09-afk-safety.ps1"
+      - "docs/playtests/v10-public-beta-checklist.md"
+      - "docs/goals/tension-doubles-v10-public-beta/state.yaml"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-afk-safety.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+      - "node scripts\\verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+    stop_if:
+      - "Requires client movement telemetry beyond current remotes."
+      - "Requires replacing active players with CPUs mid-rally."
+      - "Requires full AFK kick/punishment policy."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "scripts/verify-v09-afk-safety.ps1"
+        - "docs/playtests/v10-public-beta-checklist.md"
+        - "docs/goals/tension-doubles-v10-public-beta/state.yaml"
+      summary: "Added bounded server-side AFK safety. Existing remotes now mark activity, lobby READY clears after inactivity, and stale PIN holds release server-side without kicking, punishment, movement telemetry, or mid-rally CPU replacement."
+      commands:
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-afk-safety.ps1"
+          status: pass
+        - cmd: "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+          status: pass
+        - cmd: "node scripts\\verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+
+  - id: T901
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Final audit whether v1.0 public beta candidate readiness is satisfied after AFK safety."
+    inputs:
+      - "All done task receipts"
+      - "Last verification"
+      - "Current dirty diff"
+      - "docs/goals/tension-doubles-v10-public-beta/goal.md"
+    constraints:
+      - "Read-only."
+      - "Reject completion if queued Worker work is still required for v1.0."
+    expected_output:
+      - "complete | not_complete"
+      - "manual Studio checks remaining"
+      - "residual deferrals"
+    receipt:
+      result: done
+      decision: "complete"
+      summary: "The local v1.0 public beta candidate tranche is complete. Implemented and verified: v0.8 Fiber cosmetics plus HARE hit text styles, v0.9 late-join spectator safety and bounded AFK safety, v1.0 launch-readiness docs/checklist/copy/asset prompt specs/tutorial/analytics/public test plan, and Rojo build."
+      mapping:
+        - "v0.8: title-based non-power Fiber Color is implemented; HARE hit text styles are config-driven and preserve gameplay."
+        - "v0.9: late joiners are queued as spectators for next match; AFK READY and stale PIN holds are cleared server-side; READY/court/lobby flows remain verified."
+        - "v1.0: README contains public beta scope and Roblox description copy; v10 checklist covers launch metadata, thumbnail/icon prompt specs, tutorial completion, analytics review, public test plan, and known deferrals."
+      final_verification:
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v10-public-beta.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-session-safety.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-afk-safety.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-hare-hit-text-styles.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-fiber-skins.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-progress-lite.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1: pass"
+        - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1: pass"
+        - "node scripts\\verify-v06-guided-party.mjs: pass"
+        - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx: pass"
+        - "git diff --check on changed v1.0 files: pass"
+      manual_studio_checks_remaining:
+        - "Run Roblox Studio Play and confirm Output has no Lua errors."
+        - "Run live-ish Solo, TwoPlayer, and FourPlayer preset checks from docs/playtests/v10-public-beta-checklist.md."
+        - "Visually confirm thumbnail/icon prompt specs before upload-ready asset generation."
+      residual_deferrals:
+        - "Ordered DataStore/global rankings."
+        - "Full matchmaking/private invite routing."
+        - "Paid cosmetics/monetization."
+        - "Victory Pose and deeper Ball Trail cosmetic variants."
+
+  - id: T902
+    type: worker
+    assignee: Worker
+    status: done
+    reasoning_hint: default
+    objective: "Add Analytics Lite local session counters for public-beta playtests without external services or gameplay changes."
+    allowed_files:
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "scripts/verify-analytics-lite.ps1"
+      - "docs/playtests/v10-public-beta-checklist.md"
+      - "docs/goals/tension-doubles-v10-public-beta/state.yaml"
+    verify:
+      - "powershell -ExecutionPolicy Bypass -File scripts\\verify-analytics-lite.ps1"
+      - "powershell -ExecutionPolicy Bypass -File scripts\\verify-tdserver-startup-compile.ps1"
+      - "powershell -ExecutionPolicy Bypass -File scripts\\verify-v10-public-beta.ps1"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+    stop_if:
+      - "Requires external analytics credentials, DataStore, or publishing rights."
+      - "Requires new gameplay inputs or movement telemetry."
+      - "Requires changing scoring, ball physics, CPU behavior, or match pacing."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "scripts/verify-analytics-lite.ps1"
+        - "docs/playtests/v10-public-beta-checklist.md"
+        - "docs/goals/tension-doubles-v10-public-beta/state.yaml"
+      summary: "Added Analytics Lite local session counters in ReplicatedStorage/TensionDoublesAnalytics for public-beta playtests. Counters cover LobbyEntered, PracticeStarted, FirstREADY, FirstPIN, FirstHARE, and MatchCompleted without DataStore, external analytics credentials, movement telemetry, or gameplay changes."
+      commands:
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-analytics-lite.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-tdserver-startup-compile.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-v10-public-beta.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-ui-polish-layout.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-audio-mixer.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-match-results.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+          status: pass
+        - cmd: "node scripts\\verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-v09-session-safety.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-v09-afk-safety.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-practice-wall.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-progress-lite.ps1"
+          status: pass
+        - cmd: "powershell -ExecutionPolicy Bypass -File scripts\\verify-fiber-skins.ps1"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+        - cmd: "git diff --check"
+          status: pass
+
+  - id: T903
+    type: judge
+    assignee: Judge
+    status: done
+    reasoning_hint: high
+    objective: "Audit whether the Analytics Lite tranche is complete and leaves a coherent v1.0 public-beta candidate."
+    inputs:
+      - "T902 receipt"
+      - "Latest verification"
+      - "docs/playtests/v10-public-beta-checklist.md"
+    constraints:
+      - "Read-only."
+      - "Reject completion if required Worker tasks remain active or queued."
+    expected_output:
+      - "complete | not_complete"
+      - "manual Studio checks remaining"
+      - "residual deferrals"
+    receipt:
+      result: done
+      decision: "complete"
+      summary: "Analytics Lite closes the local public-beta observability gap. The v1.0 candidate now has launch docs, session safety, AFK safety, UI declutter, audio/result/practice loops, and local playtest counters. Manual Studio/device checks are still required before publishing, but no additional local Worker task is required for this tranche."
+      manual_studio_checks_remaining:
+        - "Open the freshly built tension-doubles-pinto-hare.rbxlx in Studio and run Play."
+        - "Inspect ReplicatedStorage/TensionDoublesAnalytics while testing LobbyEntered, FirstPIN, FirstHARE, and MatchCompleted."
+        - "Run Device Emulator/mobile checks for HUD overlap and PIN button readability."
+      residual_deferrals:
+        - "Roblox Creator Analytics/live retention review after public test."
+        - "Ordered DataStore/global rankings."
+        - "Full matchmaking/private invite routing."
+        - "Victory Pose and deeper Ball Trail cosmetic variants."
+
+checks:
+  dirty_fingerprint: unknown
+  last_verification:
+    result: pass
+    task: T903
+    commands:
+      - "powershell -ExecutionPolicy Bypass -File scripts\\verify-analytics-lite.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v10-public-beta.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-session-safety.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-v09-afk-safety.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-hare-hit-text-styles.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-fiber-skins.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-progress-lite.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-lobby-ready.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts\\verify-court-select.ps1"
+      - "node scripts\\verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"

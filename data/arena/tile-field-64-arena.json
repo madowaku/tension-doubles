@@ -1,0 +1,92 @@
+{
+  "name": "Arenas",
+  "sourceWorkflow": "agent-sprite-forge generate2dmap",
+  "sourceAssets": [
+    "assets/ChatGPT Image 2026年6月2日 19_40_15.png",
+    "assets/ChatGPT Image 2026年6月2日 19_40_24.png",
+    "assets/ChatGPT Image 2026年6月2日 19_40_35.png",
+    "assets/ChatGPT Image 2026年6月2日 19_40_43.png",
+    "assets/ChatGPT Image 2026年6月2日 19_40_54.png"
+  ],
+  "generatedModels": [
+    {
+      "courtId": "Grass",
+      "modelName": "Arena_Grass",
+      "legacyModelName": "TDArena_Grass64",
+      "sourceAsset": "assets/ChatGPT Image 2026年6月2日 19_40_15.png"
+    },
+    {
+      "courtId": "Rooftop",
+      "modelName": "Arena_Rooftop",
+      "legacyModelName": "TDArena_Rooftop64",
+      "sourceAsset": "assets/ChatGPT Image 2026年6月2日 19_40_24.png"
+    },
+    {
+      "courtId": "School",
+      "modelName": "Arena_School",
+      "legacyModelName": "TDArena_School64",
+      "sourceAsset": "assets/ChatGPT Image 2026年6月2日 19_40_35.png"
+    },
+    {
+      "courtId": "Festival",
+      "modelName": "Arena_Festival",
+      "legacyModelName": "TDArena_Festival64",
+      "sourceAsset": "assets/ChatGPT Image 2026年6月2日 19_40_43.png"
+    },
+    {
+      "courtId": "Space",
+      "modelName": "Arena_Space",
+      "legacyModelName": "TDArena_Space64",
+      "sourceAsset": "assets/ChatGPT Image 2026年6月2日 19_40_54.png"
+    }
+  ],
+  "mapMode": "scene_mode",
+  "visualModel": "engine_native_parts",
+  "runtimeObjectModel": "separate_props",
+  "collisionModel": "coarse_shapes",
+  "engineTarget": "Roblox Studio",
+  "sizeStuds": {
+    "width": 64,
+    "depth": 64
+  },
+  "designIntent": {
+    "court": "2v2 tennis-like grass court centered inside a compact field arena.",
+    "decor": "Top-down tile-field reference translated into low-cost 3D primitives: grass, sand paths, rope fence, corner spectator decks, trees, benches, lamps, shrubs, and signs.",
+    "mobileBudget": "Keep total BasePart count under 120 by using large surfaces and repeated primitive props instead of one part per visual tile."
+  },
+  "collisionContract": {
+    "collidable": [
+      "Foundation/BaseGrass",
+      "Foundation/CourtGrass",
+      "Foundation/Path*"
+    ],
+    "nonCollidable": [
+      "Court/CourtLines/*",
+      "Court/Net/*",
+      "Fences/*",
+      "SpectatorPlatforms/*",
+      "Props/*",
+      "Decor/*"
+    ],
+    "notes": [
+      "Decorative posts, trees, signs, benches, lamps, and platforms use CanCollide=false, CanTouch=false, and CanQuery=false to avoid player snagging.",
+      "The arena floor is one broad smooth collider. Existing TDServer player clamping should remain responsible for match bounds.",
+      "The model is stored under ServerStorage so it can be cloned into Workspace when needed."
+    ]
+  },
+  "folders": [
+    "Foundation",
+    "Court",
+    "Court/CourtLines",
+    "Court/Net",
+    "Fences",
+    "SpectatorPlatforms",
+    "Props",
+    "Decor",
+    "Collision"
+  ],
+  "expectedBasePartBudget": {
+    "targetMax": 120,
+    "builderExpected": 115
+  }
+}

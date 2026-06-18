@@ -4,7 +4,9 @@
 
 local Players = game:GetService("Players")
 local ContextActionService = game:GetService("ContextActionService")
+local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local SoundService = game:GetService("SoundService")
 local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local StarterGui = game:GetService("StarterGui")
@@ -15,16 +17,56 @@ local Config = require(ReplicatedStorage:WaitForChild("TDShared"):WaitForChild("
 
 local Remotes = ReplicatedStorage:WaitForChild("TensionDoublesRemotes")
 local PinInputEvent = Remotes:WaitForChild("PinInputEvent")
+local LobbyReadyEvent = Remotes:WaitForChild("LobbyReadyEvent")
+local MatchStateEvent = Remotes:WaitForChild("MatchStateEvent")
 
 local ACTION_NAME = "TensionDoubles_Pin"
+local READY_ACTION_NAME = "TensionDoubles_LobbyReady"
 local isPinning = false
+local isLobbyReady = false
+local isInLobby = false
+local currentLobbyState = "WaitingForPlayers"
 local pinButton = nil
+local readyButton = nil
 local buttonStroke = nil
 local buttonGlow = nil
 local helperLabel = nil
+local controlsGui = nil
 local baseButtonScale = Config.MobilePinButtonScaleLandscape or 0.165
 local pressedButtonScale = baseButtonScale + 0.026
 local currentButtonPosition = UDim2.fromScale(Config.MobilePinButtonXLandscape or 0.885, Config.MobilePinButtonYLandscape or 0.705)
+
+local function getSfxSoundGroup()
+	local groupName = Config.SfxSoundGroupName or "TDSFX"
+	local soundGroup = SoundService:FindFirstChild(groupName)
+	if not soundGroup then
+		soundGroup = Instance.new("SoundGroup")
+		soundGroup.Name = groupName
+		soundGroup.Volume = Config.SfxDefaultVolume or 0.70
+		soundGroup.Parent = SoundService
+	end
+	return soundGroup
+end
+
+local function playPinSfx()
+	if Config.AudioMixerEnabled == false then
+		return
+	end
+	local ids = Config.AudioSfxSoundIds or {}
+	local soundId = ids.Pin
+	if not soundId or soundId == "" then
+		return
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = "TD_PinSfx"
+	sound.SoundId = soundId
+	sound.Volume = 0.8
+	sound.PlaybackSpeed = 1.15
+	sound.SoundGroup = getSfxSoundGroup()
+	sound.Parent = SoundService
+	sound:Play()
+	Debris:AddItem(sound, 2)
+end
 
 local function preferLandscape()
 	if not UserInputService.TouchEnabled or Config.PreferLandscape == false then
@@ -103,7 +145,39 @@ local function setPinning(value)
 	end
 	isPinning = value
 	updateButtonVisual()
+	if isPinning then
+		playPinSfx()
+	end
 	PinInputEvent:FireServer(isPinning)
+end
+
+local function updateReadyButton()
+	if not readyButton then
+		return
+	end
+	readyButton.Visible = isInLobby
+	if isLobbyReady then
+		readyButton.Text = "READY!"
+		readyButton.BackgroundColor3 = Color3.fromRGB(255, 220, 90)
+		readyButton.TextColor3 = Color3.fromRGB(35, 30, 10)
+	else
+		readyButton.Text = currentLobbyState == "WaitingForPlayers" and "JOIN MATCH" or "READY"
+		readyButton.BackgroundColor3 = Color3.fromRGB(245, 245, 255)
+		readyButton.TextColor3 = Color3.fromRGB(20, 24, 34)
+	end
+end
+
+local function setLobbyReady(value)
+	if not isInLobby then
+		return
+	end
+	isLobbyReady = value == true
+	updateReadyButton()
+	LobbyReadyEvent:FireServer(isLobbyReady)
+end
+
+local function toggleLobbyReady()
+	setLobbyReady(not isLobbyReady)
 end
 
 local function onPinAction(_, inputState, _inputObject)
@@ -126,6 +200,22 @@ ContextActionService:BindAction(
 	Enum.KeyCode.LeftShift,
 	Enum.KeyCode.ButtonR2,
 	Enum.KeyCode.ButtonX
+)
+
+local function onReadyAction(_, inputState, _inputObject)
+	if inputState == Enum.UserInputState.Begin then
+		toggleLobbyReady()
+		return Enum.ContextActionResult.Sink
+	end
+	return Enum.ContextActionResult.Pass
+end
+
+ContextActionService:BindAction(
+	READY_ACTION_NAME,
+	onReadyAction,
+	false,
+	Enum.KeyCode.R,
+	Enum.KeyCode.ButtonY
 )
 
 local function applyMobileButtonLayout()
@@ -153,22 +243,84 @@ local function applyMobileButtonLayout()
 	end
 end
 
-local function createMobilePinButton()
-	if not UserInputService.TouchEnabled then
-		return
+local function getOrCreateControlsGui()
+	if controlsGui then
+		return controlsGui
 	end
-	if playerGui:FindFirstChild("TensionDoublesMobileControls") then
-		return
+
+	controlsGui = playerGui:FindFirstChild("TensionDoublesPlayerControls")
+	if controlsGui then
+		for _, child in ipairs(controlsGui:GetChildren()) do
+			child:Destroy()
+		end
+		return controlsGui
+	end
+
+	controlsGui = playerGui:FindFirstChild("TensionDoublesMobileControls")
+	if controlsGui then
+		controlsGui.Name = "TensionDoublesPlayerControls"
+		for _, child in ipairs(controlsGui:GetChildren()) do
+			child:Destroy()
+		end
+		return controlsGui
 	end
 
 	preferLandscape()
 
 	local gui = Instance.new("ScreenGui")
-	gui.Name = "TensionDoublesMobileControls"
+	gui.Name = "TensionDoublesPlayerControls"
 	gui.ResetOnSpawn = false
 	gui.IgnoreGuiInset = false
 	gui.DisplayOrder = 35
 	gui.Parent = playerGui
+
+	controlsGui = gui
+	return gui
+end
+
+local function createReadyButton(gui)
+	if readyButton then
+		return
+	end
+
+	local ready = Instance.new("TextButton")
+	ready.Name = "ReadyButton"
+	ready.AnchorPoint = Vector2.new(0.5, 0.5)
+	ready.Position = UDim2.fromScale(0.5, Config.LobbyMainButtonY or 0.545)
+	ready.Size = UDim2.fromScale(
+		UserInputService.TouchEnabled and (Config.LobbyMainButtonWidthTouch or 0.34) or (Config.LobbyMainButtonWidthDesktop or 0.24),
+		UserInputService.TouchEnabled and (Config.LobbyMainButtonHeightTouch or 0.105) or (Config.LobbyMainButtonHeightDesktop or 0.085)
+	)
+	ready.BackgroundTransparency = 0.02
+	ready.TextScaled = true
+	ready.Font = Enum.Font.GothamBlack
+	ready.AutoButtonColor = false
+	ready.Visible = false
+	ready.ZIndex = 12
+	ready.Parent = gui
+
+	local readyCorner = Instance.new("UICorner")
+	readyCorner.CornerRadius = UDim.new(0, 10)
+	readyCorner.Parent = ready
+
+	local readyStroke = Instance.new("UIStroke")
+	readyStroke.Thickness = 3
+	readyStroke.Color = Color3.fromRGB(40, 44, 58)
+	readyStroke.Transparency = 0.02
+	readyStroke.Parent = ready
+
+	readyButton = ready
+	updateReadyButton()
+
+	ready.Activated:Connect(function()
+		toggleLobbyReady()
+	end)
+end
+
+local function createMobilePinButton(gui)
+	if pinButton then
+		return
+	end
 
 	local glow = Instance.new("Frame")
 	glow.Name = "PinGlow"
@@ -229,6 +381,7 @@ local function createMobilePinButton()
 	buttonStroke = stroke
 	buttonGlow = glow
 	helperLabel = helper
+
 	applyMobileButtonLayout()
 	updateButtonVisual()
 
@@ -252,7 +405,26 @@ local function createMobilePinButton()
 	end
 end
 
-createMobilePinButton()
+local function createPlayerControls()
+	local gui = getOrCreateControlsGui()
+	createReadyButton(gui)
+	if UserInputService.TouchEnabled then
+		createMobilePinButton(gui)
+	end
+end
+
+createPlayerControls()
+
+MatchStateEvent.OnClientEvent:Connect(function(data)
+	local state = data.state or ""
+	local wasInLobby = isInLobby
+	currentLobbyState = state
+	isInLobby = state == "Lobby" or state == "WaitingForPlayers"
+	if not isInLobby and wasInLobby then
+		isLobbyReady = false
+	end
+	updateReadyButton()
+end)
 
 localPlayer.CharacterRemoving:Connect(function()
 	setPinning(false)

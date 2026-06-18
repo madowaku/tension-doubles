@@ -1,0 +1,91 @@
+# Goal Maker v2 state.yaml
+
+version: 2
+
+goal:
+  title: "Tension Doubles v0.7 First Fun Loop"
+  slug: "tension-doubles-v07-first-fun-loop"
+  kind: specific
+  tranche: "Implement and verify per-player FIRST HARE celebration, then audit it with existing Practice Wall, Match Results, and light records."
+  status: active
+
+rules:
+  pm_owns_state: true
+  one_active_task: true
+  max_write_workers: 1
+  no_implementation_without_worker_or_pm_task: true
+  no_completion_without_judge_or_pm_audit: true
+  planning_is_not_completion: true
+  queued_required_worker_blocks_completion: true
+
+agents:
+  scout: installed
+  worker: installed
+  judge: installed
+
+active_task: T001
+
+tasks:
+  - id: T001
+    type: worker
+    assignee: Worker
+    status: active
+    reasoning_hint: low
+    objective: "Add a per-player per-session FIRST HARE celebration to the existing HitFx pipeline without affecting Practice Wall or gameplay."
+    inputs:
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+    constraints:
+      - "FIRST HARE only for a player's own team real-match HARE."
+      - "Practice Wall cannot consume it."
+      - "Normal HARE feedback remains for everyone else."
+      - "No new RemoteEvent or DataStore."
+      - "No physics, scoring, CPU, or HARE eligibility changes."
+    expected_output:
+      - "Config-driven FIRST HARE copy"
+      - "Personalized existing HitFx payload flag"
+      - "Client first-HARE visual branch"
+      - "Regression verifier and playtest checklist"
+    allowed_files:
+      - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+      - "src/ServerScriptService/TDServer.server.lua"
+      - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+      - "scripts/verify-first-hare-celebration.ps1"
+      - "docs/playtests/v07-first-fun-loop-checklist.md"
+    verify:
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-first-hare-celebration.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-analytics-lite.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-progress-lite.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-practice-wall.ps1"
+      - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-match-results.ps1"
+    stop_if:
+      - "Need files outside allowed_files."
+      - "Existing HitFx payload cannot be extended compatibly."
+      - "Verification fails twice for the same reason."
+
+  - id: T999
+    type: judge
+    assignee: Judge
+    status: queued
+    reasoning_hint: high
+    objective: "Audit whether the v0.7 First Fun Loop tranche is complete and regression-safe."
+    inputs:
+      - "T001 receipt"
+      - "Fresh full verification"
+      - "Current dirty diff"
+    constraints:
+      - "Do not implement."
+      - "Reject completion if Practice Wall, Match Results, Progress Lite, or analytics regress."
+    expected_output:
+      - "complete | not_complete"
+      - "Evidence for all four First Fun Loop surfaces"
+      - "Missing evidence"
+    receipt: null
+
+checks:
+  dirty_fingerprint: "broad pre-existing dirty worktree; preserve all unrelated changes"
+  last_verification:
+    result: unknown
+    task: null
+    commands: []

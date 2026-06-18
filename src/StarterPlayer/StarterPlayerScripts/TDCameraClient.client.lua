@@ -13,6 +13,13 @@ local Config = require(ReplicatedStorage:WaitForChild("TDShared"):WaitForChild("
 local isTouch = UserInputService.TouchEnabled
 local shakeUntil = 0
 local shakePower = 0
+local currentCourtOriginX = 0
+local currentCourtOriginZ = 0
+local currentState = "WaitingForPlayers"
+
+local function isLobbyState(state)
+	return state == "WaitingForPlayers" or state == "Lobby"
+end
 
 local function isPortrait()
 	if not camera then
@@ -61,6 +68,9 @@ local function bindHitFx()
 	if matchState then
 		matchState.OnClientEvent:Connect(function(data)
 			local state = data and data.state or ""
+			currentState = state
+			currentCourtOriginX = data.courtOriginX or currentCourtOriginX
+			currentCourtOriginZ = data.courtOriginZ or currentCourtOriginZ
 			if state == "PointScored" then
 				shakePower = 0.55
 				shakeUntil = os.clock() + 0.16
@@ -82,15 +92,26 @@ local function updateCamera()
 
 	camera.CameraType = Enum.CameraType.Scriptable
 	local cameraHeight, cameraBack, cameraFov = getCameraSettings()
-	camera.FieldOfView = cameraFov
 
 	local side = 1
-	if localPlayer.Team and localPlayer.Team.Name == "Blue" then
+	local focusX = currentCourtOriginX
+	local focusZ = currentCourtOriginZ
+	local focusY = 1.2
+	if isLobbyState(currentState) then
+		local lobbyFocus = Config.LobbyCameraFocusPosition or Config.LobbySpawnPosition or Vector3.new(0, 1.2, -88)
+		focusX = lobbyFocus.X
+		focusY = lobbyFocus.Y
+		focusZ = lobbyFocus.Z
+		cameraHeight = Config.LobbyCameraHeight or cameraHeight
+		cameraBack = Config.LobbyCameraBack or cameraBack
+		cameraFov = Config.LobbyCameraFov or cameraFov
+	elseif localPlayer.Team and localPlayer.Team.Name == "Blue" then
 		side = -1
 	end
+	camera.FieldOfView = cameraFov
 
-	local camPos = Vector3.new(0, cameraHeight, cameraBack * side)
-	local lookAt = Vector3.new(0, 1.2, 0)
+	local camPos = Vector3.new(focusX, cameraHeight, focusZ + cameraBack * side)
+	local lookAt = Vector3.new(focusX, focusY, focusZ)
 
 	local now = os.clock()
 	if now < shakeUntil then

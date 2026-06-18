@@ -93,6 +93,36 @@ assertIncludes(
   "solo, 2-player, and 4-player playtest profiles should be explicit"
 );
 
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /LivePreset\s*=\s*"(Solo|TwoPlayer|FourPlayer)"/,
+  "the active live preset should be a single safe switch instead of hand-editing match flags"
+);
+
+assertIncludes(
+  "scripts/verify-live-preset.ps1",
+  "ExpectedPreset",
+  "live preset verification should allow 4-player testers to assert the active preset before play"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "LivePresets",
+  "solo, 2-player, and 4-player live presets should be config-driven"
+);
+
+assertRegex(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  /FourPlayer\s*=\s*{[\s\S]*AllowGhostPartners\s*=\s*false[\s\S]*CpuFillEnabled\s*=\s*false[\s\S]*MinPlayersToAutoStart\s*=\s*4[\s\S]*}/,
+  "4-player live preset must disable ghost partners and CPU fill while requiring four humans"
+);
+
+assertIncludes(
+  "src/ReplicatedStorage/TDShared/GameConfig.lua",
+  "ActiveLivePreset",
+  "runtime config should expose the preset that was applied"
+);
+
 assertIncludes(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
   "CpuFillEnabled",
@@ -203,8 +233,8 @@ assertIncludes(
 
 assertRegex(
   "src/ReplicatedStorage/TDShared/GameConfig.lua",
-  /LandingTargetSize\s*=\s*7\.2/,
-  "mobile landing target should be large enough to see in landscape"
+  /LandingTargetSize\s*=\s*8\.0/,
+  "mobile landing target should be large enough to see in landscape on the wider court"
 );
 
 assertIncludes(
@@ -411,6 +441,12 @@ assertIncludes(
   "match-state payload should expose CPU fill counts"
 );
 
+assertIncludes(
+  "src/ServerScriptService/TDServer.server.lua",
+  "livePreset = Config.ActiveLivePreset or Config.LivePreset",
+  "match-state payload should expose the applied live preset"
+);
+
 assertRegex(
   "src/ServerScriptService/TDServer.server.lua",
   /awardPoint\([^\n]+,\s*(Config\.ScoreReasonDropText or )?"DROP!"/,
@@ -533,6 +569,18 @@ assertIncludes(
 
 assertIncludes(
   "README.md",
+  'LivePreset = "FourPlayer"',
+  "README should tell 4-player testers to switch the preset, not hand-edit ghost and CPU flags"
+);
+
+assertIncludes(
+  "README.md",
+  "Do not hand-edit `AllowGhostPartners`, `CpuFillEnabled`, or `MinPlayersToAutoStart`",
+  "README should prevent risky manual flag combinations"
+);
+
+assertIncludes(
+  "README.md",
   "v0.6 RC checklist",
   "README should point to the v0.6 RC checklist"
 );
@@ -553,6 +601,18 @@ assertIncludes(
   "docs/playtests/v06-rc-checklist.md",
   "landing target",
   "RC checklist should ask testers to verify the landing target"
+);
+
+assertIncludes(
+  "docs/playtests/v06-rc-checklist.md",
+  'LivePreset = "FourPlayer"',
+  "RC checklist should require the safe four-player preset"
+);
+
+assertIncludes(
+  "docs/playtests/v06-rc-checklist.md",
+  "no CPU labels",
+  "4-player RC checklist should catch accidental CPU fill"
 );
 
 console.log("v0.6 guided party source checks passed");
