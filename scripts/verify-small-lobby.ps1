@@ -32,11 +32,12 @@ $checks = @(
 			$config.Contains('PracticeVsBots')
 	},
 	@{
-		Name = "server creates rule board, participant board, and spectator area"
-		Ok = $server.Contains('LobbyRulesBoard') -and
+		Name = "server creates tutorial board, participant board, and spectator area"
+		Ok = $server.Contains('LobbyHowToPlayBoard') -and
+			$server.Contains('addLobbyTutorialBoard(LobbyFolder, lobbySpawnPos)') -and
 			$server.Contains('LobbyParticipantBoard') -and
 			$server.Contains('LobbySpectatorArea') -and
-			$server.Contains('Config.LobbyRulesText') -and
+			$server.Contains('Config.LobbyTutorialStepPin') -and
 			$server.Contains('lobbyParticipantLabel')
 	},
 	@{

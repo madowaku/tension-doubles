@@ -22,10 +22,10 @@ $checks = @(
 			$ui.Contains('Config.HareHitTextComboSuffixFormat or " x%d"')
 	},
 	@{
-		Name = "ui keeps existing fxTextForType payload shape"
-		Ok = $ui.Contains('local function fxTextForType(fxType, comboCount)') -and
+		Name = "ui preserves existing HARE text with an appended compatibility flag"
+		Ok = $ui.Contains('local function fxTextForType(fxType, comboCount, isFirstHare)') -and
 			$ui.Contains('return getHareHitText(comboCount), Color3.fromRGB(255, 230, 90)') -and
-			$ui.Contains('HitFxEvent.OnClientEvent:Connect(function(fxType, _position, teamName, rallyCount, comboCount)')
+			$ui.Contains('HitFxEvent.OnClientEvent:Connect(function(fxType, _position, teamName, rallyCount, comboCount, isFirstHare)')
 	},
 	@{
 		Name = "v1.0 checklist covers HARE hit text styles"

@@ -7,7 +7,7 @@ goal:
   slug: "tension-doubles-v07-first-fun-loop"
   kind: specific
   tranche: "Implement and verify per-player FIRST HARE celebration, then audit it with existing Practice Wall, Match Results, and light records."
-  status: active
+  status: done
 
 rules:
   pm_owns_state: true
@@ -23,13 +23,13 @@ agents:
   worker: installed
   judge: installed
 
-active_task: T001
+active_task: null
 
 tasks:
   - id: T001
     type: worker
     assignee: Worker
-    status: active
+    status: done
     reasoning_hint: low
     objective: "Add a per-player per-session FIRST HARE celebration to the existing HitFx pipeline without affecting Practice Wall or gameplay."
     inputs:
@@ -52,6 +52,8 @@ tasks:
       - "src/ServerScriptService/TDServer.server.lua"
       - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
       - "scripts/verify-first-hare-celebration.ps1"
+      - "scripts/verify-hare-hit-text-styles.ps1"
+      - "scripts/verify-small-lobby.ps1"
       - "docs/playtests/v07-first-fun-loop-checklist.md"
     verify:
       - "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-first-hare-celebration.ps1"
@@ -63,11 +65,31 @@ tasks:
       - "Need files outside allowed_files."
       - "Existing HitFx payload cannot be extended compatibly."
       - "Verification fails twice for the same reason."
+    receipt:
+      result: done
+      changed_files:
+        - "src/ReplicatedStorage/TDShared/GameConfig.lua"
+        - "src/ServerScriptService/TDServer.server.lua"
+        - "src/StarterPlayer/StarterPlayerScripts/TDUIClient.client.lua"
+        - "scripts/verify-first-hare-celebration.ps1"
+        - "scripts/verify-hare-hit-text-styles.ps1"
+        - "scripts/verify-small-lobby.ps1"
+        - "docs/playtests/v07-first-fun-loop-checklist.md"
+      commands:
+        - cmd: "all scripts/verify-*.ps1"
+          status: pass
+        - cmd: "node scripts/verify-v06-guided-party.mjs"
+          status: pass
+        - cmd: "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+          status: pass
+        - cmd: "Studio Play and Output inspection"
+          status: pass
+      summary: "Added per-player per-session FIRST HARE through an appended HitFx flag. Practice Wall and other teams cannot consume it, normal HARE copy remains, and protected gameplay is unchanged."
 
   - id: T999
     type: judge
     assignee: Judge
-    status: queued
+    status: done
     reasoning_hint: high
     objective: "Audit whether the v0.7 First Fun Loop tranche is complete and regression-safe."
     inputs:
@@ -81,11 +103,23 @@ tasks:
       - "complete | not_complete"
       - "Evidence for all four First Fun Loop surfaces"
       - "Missing evidence"
-    receipt: null
+    receipt:
+      result: done
+      decision: complete
+      summary: "v0.7 First Fun Loop tranche is complete: Practice Wall, Match Results, light records, and FIRST HARE all have passing source contracts; full verification, build, and Studio startup are green."
+      evidence:
+        - "FIRST HARE is personalized to the eligible team player and only once per server session."
+        - "Practice Wall keeps the legacy payload and does not mutate FirstHareCelebrated."
+        - "Existing HARE text, analytics, progress, results, and Practice Wall verifiers pass."
+        - "Studio Play created remotes and HUD with FIRST HARE config and no red game-script errors."
 
 checks:
   dirty_fingerprint: "broad pre-existing dirty worktree; preserve all unrelated changes"
   last_verification:
-    result: unknown
-    task: null
-    commands: []
+    result: pass
+    task: T001
+    commands:
+      - "all scripts/verify-*.ps1"
+      - "node scripts/verify-v06-guided-party.mjs"
+      - "rojo build default.project.json --output tension-doubles-pinto-hare.rbxlx"
+      - "Studio Play and Output inspection"
